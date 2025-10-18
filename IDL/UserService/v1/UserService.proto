@@ -1,0 +1,72 @@
+// IDL/user_service.proto
+syntax = "proto3";
+
+// 自定义域名空间
+package UserService.v1;
+
+import "google/api/annotations.proto"; // 引入 http restful 路由配置
+
+// 用户服务定义
+service UserService {
+  // 用户注册
+  rpc Register(RegisterRequest) returns (RegisterResponse) {
+    option (google.api.http) = {
+      post: "/v1/users/register"
+      body: "*"
+    };
+  }
+  // 用户登录
+  rpc Login(LoginRequest) returns (LoginResponse) {
+    option (google.api.http) = {
+      post: "/v1/users/login"
+      body: "*"
+    };
+  }
+  // 获取用户信息
+  rpc GetUserInfo(GetUserInfoRequest) returns (GetUserInfoResponse) {
+    option (google.api.http) = {
+      get: "/v1/users/{user_id}" // 使用路径参数
+    };
+  }
+}
+
+// --- 消息体定义 ---
+
+// 用户信息
+message User {
+  string user_id = 1;
+  string username = 2;
+  string email = 3;
+  string avatar_url = 4; // 存储图片URL
+}
+
+// 注册
+message RegisterRequest {
+  string username = 1;
+  string password = 2;
+  string email = 3;
+  string avatar_url = 4; // 注册时可以选填
+}
+
+message RegisterResponse {
+  string user_id = 1;
+}
+
+// 登录
+message LoginRequest {
+  string username = 1;
+  string password = 2;
+}
+
+message LoginResponse {
+  string token = 1; // 返回JWT Token
+}
+
+// 获取用户信息
+message GetUserInfoRequest {
+  string user_id = 1;
+}
+
+message GetUserInfoResponse {
+  User user = 1;
+}
