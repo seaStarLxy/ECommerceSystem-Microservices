@@ -7,16 +7,39 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 find_package(gRPC REQUIRED)
 message(STATUS "Found gRPC: ${gRPC_FOUND}")
+find_package(PostgreSQL REQUIRED)
+message(STATUS "Found PostgreSQL: ${PostgreSQL_FOUND}")
+
+
 #find_package(Boost 1.74.0 REQUIRED CONFIG COMPONENTS context coroutine thread)
 
 # 使用 FetchContent_Declare 之前，必须包含该模块
 include(FetchContent)
 FetchContent_Declare(
         uuid_v7
-        GIT_REPOSITORY https://github.com/mariusbancila/stduuid.git
+        GIT_REPOSITORY https://github.com/seaStarLxy/stduuid.git
         GIT_TAG        v1.2.3
 )
 FetchContent_MakeAvailable(uuid_v7)
+FetchContent_Declare(
+        bcrypt
+        GIT_REPOSITORY https://github.com/starlxy123/Bcrypt.cpp
+        GIT_TAG master
+)
+FetchContent_MakeAvailable(bcrypt)
+FetchContent_Declare(
+        boost_di
+        GIT_REPOSITORY https://github.com/seaStarLxy/di.git
+        GIT_TAG v1.3.2
+)
+FetchContent_MakeAvailable(boost_di)
+include(FetchContent)
+FetchContent_Declare(
+        jwt-cpp
+        GIT_REPOSITORY https://github.com/seaStarLxy/jwt-cpp.git
+        GIT_TAG v0.6.0
+)
+FetchContent_MakeAvailable(jwt-cpp)
 
 # 自定义 IDL 目录
 set(MY_IDL_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../IDL")
@@ -63,6 +86,10 @@ protobuf_generate(
 
 
 # 收集源文件
+set(SERVER_FILES
+        "${CMAKE_CURRENT_SOURCE_DIR}/server/user_service_server.cc"
+)
+
 set(CALL_DATA_FILES
         "${CMAKE_CURRENT_SOURCE_DIR}/call_data/src/register_call_data.cc"
 )
@@ -71,21 +98,32 @@ set(SERVICE_FILES
 
 )
 
+set(DOMAIN_FILES
+
+)
+
 set(REPOSITORY_FILES
 
 )
 
-set(SERVER_FILES
-        "${CMAKE_CURRENT_SOURCE_DIR}/server/user_service_server.cc"
+set(MODEL_FILES
+        "${CMAKE_CURRENT_SOURCE_DIR}/model/user.cc"
+)
+
+set(DB_FILES
+        "${CMAKE_CURRENT_SOURCE_DIR}/db/src/pq_connection.cc"
 )
 
 # 添加主程序可执行文件
 add_executable(UserServiceServer
         main.cc
+        ${SERVER_FILES}
         ${CALL_DATA_FILES}
         ${SERVICE_FILES}
+        ${DOMAIN_FILES}
         ${REPOSITORY_FILES}
-        ${SERVER_FILES}
+        ${MODEL_FILES}
+        ${DB_FILES}
 )
 
 # 添加头文件包含目录
@@ -97,4 +135,8 @@ target_include_directories(UserServiceServer PUBLIC
 target_link_libraries(UserServiceServer PUBLIC
         my_proto_lib        # 链接自己生成的 proto 代码库
         gRPC::grpc++
+        bcrypt
+        jwt-cpp
+        PostgreSQL::PostgreSQL
+#        ${PostgreSQL_LIBRARIES}
 )

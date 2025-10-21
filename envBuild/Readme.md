@@ -15,3 +15,4 @@ docker-compose down
 > extra: 
 curl
 sudo apt install libboost-all-dev
+> apt install libboost-coroutine-dev

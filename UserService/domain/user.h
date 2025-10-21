@@ -2,7 +2,7 @@
 #include <string>
 #include <chrono>
 
-namespace Domain
+namespace UserService::domain
 {
 
     struct User
