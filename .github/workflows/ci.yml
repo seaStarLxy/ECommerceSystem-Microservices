@@ -23,21 +23,25 @@ jobs:
           apt-get update
           apt-get install -y libboost-coroutine-dev libssl-dev
       
-      - name: 3. Configure CMake
+      - name: 3. Configure CMake (严格按照 CLion 命令)
         run: |
-          cmake -B $GITHUB_WORKSPACE/UserService/build \
+          # 定义构建目录，与你的 CLion 保持一致
+          export BUILD_DIR=$GITHUB_WORKSPACE/UserService/build
+          
+          cmake -B $BUILD_DIR \
                 -S $GITHUB_WORKSPACE/UserService \
-                -DCMAKE_PREFIX_PATH=/usr/local/grpc_install \
-                -DProtobuf_PROTOC_EXECUTABLE=/usr/local/grpc_install/bin/protoc \
-                -DgRPC_CPP_PLUGIN_EXECUTABLE=/usr/local/grpc_install/bin/grpc_cpp_plugin \
-                -DOPENSSL_ROOT_DIR=/usr \
-                -DOPENSSL_USE_STATIC_LIBS=OFF
-      
-          # 创建生成目录
-          mkdir -p $GITHUB_WORKSPACE/UserService/build/generated
-                    
-      - name: 4. Build project
-        run: cmake --build $GITHUB_WORKSPACE/UserService/build
+                -G Ninja \
+                -DCMAKE_BUILD_TYPE=Debug \
+                -DCMAKE_MAKE_PROGRAM=/usr/bin/ninja \
+                -DCMAKE_PREFIX_PATH=/usr/local/grpc_install
+          
+          # # 创建生成目录 (使用新的构建目录)
+          # mkdir -p $BUILD_DIR/generated
+                  
+      - name: 4. Build project (严格按照 CLion 命令)
+        run: |
+          export BUILD_DIR=$GITHUB_WORKSPACE/UserService/build
+          cmake --build $BUILD_DIR --target UserServiceServer
 
       - name: 5. Run Program (冒烟测试)
         run: |
