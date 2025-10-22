@@ -1,0 +1,63 @@
+name: C++ gRPC CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build_and_test:
+    runs-on: ubuntu-latest
+    container:
+      image: seastarxy/grpc-dev:v2 # 你的公共镜像
+
+    steps:
+      - name: 1. Checkout code
+        uses: actions/checkout@v4
+
+      - name: 2. Install Boost.Coroutine patch
+        run: |
+          apt-get update
+          apt-get install -y libboost-coroutine-dev
+      
+      - name: 3. Configure CMake
+        run: cmake -B ${{ github.workspace }}/UserService/build -S ${{ github.workspace }}/UserService
+
+      - name: 4. Build project
+        # 这一步对应你 CLion 里的“构建”
+        run: cmake --build ${{ github.workspace }}/UserService/build
+
+      - name: 5. Run Program (冒烟测试)
+        run: |
+          echo "Attempting to start the server..."
+          EXECUTABLE_PATH="${{ github.workspace }}/UserService/build/UserService"
+
+          # 检查文件是否存在
+          if [ ! -f "$EXECUTABLE_PATH" ]; then
+            echo "Error: Executable not found at $EXECUTABLE_PATH"
+            # 列出 build 目录内容，方便你调试
+            ls -R ${{ github.workspace }}/UserService/build
+            exit 1
+          fi
+
+          # 1. 把你的服务器程序放到后台运行
+          $EXECUTABLE_PATH &
+          
+          # 2. 拿到这个后台进程的 PID
+          SERVER_PID=$!
+          echo "Server started with PID ${SERVER_PID}"
+
+          # 3. 等待 5 秒钟
+          sleep 5
+
+          # 4. 检查服务器进程是否还活着
+          # kill -0 $PID 不会真的杀死进程，只是检查进程是否存在
+          if kill -0 $SERVER_PID; then
+            echo "SMOKE TEST SUCCESS: Server is still running after 5 seconds."
+            # 5. 杀死服务器，让 CI 步骤可以正常结束
+            kill $SERVER_PID
+          else
+            echo "SMOKE TEST FAILED: Server crashed within 5 seconds!"
+            exit 1 # 退出码非 0，标记 CI 失败
+          fi
