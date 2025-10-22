@@ -22,22 +22,22 @@ jobs:
           apt-get install -y libboost-coroutine-dev
       
       - name: 3. Configure CMake
-        run: cmake -B ${{ github.workspace }}/UserService/build -S ${{ github.workspace }}/UserService
+        run: cmake -B $GITHUB_WORKSPACE/UserService/build -S $GITHUB_WORKSPACE/UserService
 
       - name: 4. Build project
         # 这一步对应你 CLion 里的“构建”
-        run: cmake --build ${{ github.workspace }}/UserService/build
+        run: cmake --build $GITHUB_WORKSPACE/UserService/build
 
       - name: 5. Run Program (冒烟测试)
         run: |
           echo "Attempting to start the server..."
-          EXECUTABLE_PATH="${{ github.workspace }}/UserService/build/UserService"
+          EXECUTABLE_PATH="$GITHUB_WORKSPACE/UserService/build/UserService"
 
           # 检查文件是否存在
           if [ ! -f "$EXECUTABLE_PATH" ]; then
             echo "Error: Executable not found at $EXECUTABLE_PATH"
             # 列出 build 目录内容，方便你调试
-            ls -R ${{ github.workspace }}/UserService/build
+            ls -R $GITHUB_WORKSPACE/UserService/build
             exit 1
           fi
 
