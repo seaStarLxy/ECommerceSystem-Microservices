@@ -22,6 +22,13 @@ jobs:
         run: |
           apt-get update
           apt-get install -y libboost-coroutine-dev
+
+      - name: 2.5. Find gRPC Tools (DEBUG)
+        run: |
+          echo "Searching for grpc_cpp_plugin in the container..."
+          find / -name grpc_cpp_plugin 2>/dev/null || echo "PLUGIN NOT FOUND"
+          echo "Searching for protoc in the container..."
+          find / -name protoc 2>/dev/null || echo "PROTOC NOT FOUND"
       
       - name: 3. Configure CMake
         run: cmake -B $GITHUB_WORKSPACE/UserService/build \
