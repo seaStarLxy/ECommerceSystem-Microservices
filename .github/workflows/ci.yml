@@ -29,7 +29,9 @@ jobs:
                 -S $GITHUB_WORKSPACE/UserService \
                 -DCMAKE_PREFIX_PATH=/usr/local/grpc_install \
                 -DProtobuf_PROTOC_EXECUTABLE=/usr/local/grpc_install/bin/protoc \
-                -DgRPC_CPP_PLUGIN_EXECUTABLE=/usr/local/grpc_install/bin/grpc_cpp_plugin
+                -DgRPC_CPP_PLUGIN_EXECUTABLE=/usr/local/grpc_install/bin/grpc_cpp_plugin \
+                -DOPENSSL_ROOT_DIR=/usr \
+                -DOPENSSL_USE_STATIC_LIBS=OFF
       
           # 创建生成目录
           mkdir -p $GITHUB_WORKSPACE/UserService/build/generated
