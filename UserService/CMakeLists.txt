@@ -104,8 +104,8 @@ set(ADAPTER_FILES
 #        v1
 #        "adapter/v1/src/register_call_data.cc"
 #         v2
-#        "adapter/v2/object_pool/call_data_manager.cc"
-        "adapter/v2/src/register_call_data.cc"
+        "adapter/v2/call_data_manager/src/register_call_data_manager.cc"
+        "adapter/v2/call_data/src/register_call_data.cc"
 )
 
 set(SERVICE_FILES

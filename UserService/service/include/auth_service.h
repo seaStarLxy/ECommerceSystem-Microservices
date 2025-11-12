@@ -9,7 +9,7 @@ namespace user_service::service {
     public:
         AuthService();
         ~AuthService() override;
-        boost::asio::awaitable<SendCodeResponse> LoginByCode(const SendCodeRequest&) override;
+        boost::asio::awaitable<SendCodeResponse> SendCode(const SendCodeRequest&) override;
         boost::asio::awaitable<LoginResult> LoginByCode(const LoginByCodeRequest&) override;
         boost::asio::awaitable<LoginResult> LoginByPassword(const LoginByCodeRequest&) override;
     };
