@@ -2,41 +2,35 @@
 // All Rights Reserved.
 
 #pragma once
+#include "adapter/v2/call_data/interface/i_call_data.h"
+#include "adapter/v2/call_data_manager/interface/call_data_manager.hpp"
 #include <boost/asio/co_spawn.hpp>
 #include <spdlog/spdlog.h>
 #include <grpcpp/grpcpp.h>
 
-#include "adapter/v2/manager/call_data_manager.hpp"
-
 namespace user_service::adapter::v2 {
-    // CallData 基类
-    class CallDataBase {
-    public:
-        explicit CallDataBase(ICallDataManager* manager): manager_(manager), status_(State::WAIT_PROCESSING) {}
-        virtual ~CallDataBase() = default;
 
-        // HandleRpc 循环唯一需要调用的函数
-        virtual void Proceed() = 0;
-    protected:
-        ICallDataManager* manager_;
-        enum class State { WAIT_PROCESSING, FINISHED };
-        State status_;
-    };
+    // template<typename T>
+    // concept HadSpecificLogic = requires(T& derived) {
+    //     // requires 语句检查：
+    //     // 1. 是否存在一个名为 RunSpecificLogic 的成员函数
+    //     // 2. 它被调用时，返回的类型是否与 boost::asio::awaitable<void> 相同
+    //     { derived.RunSpecificLogic() } -> std::same_as<boost::asio::awaitable<void>>;
+    // };
 
     /*
      * 特定类型的 CallData 的公共部分，即：让编译器替我生成每个接口对应的CallData。
      * 但是每个CallData都有不一样的地方，不一样的地方再继承一个子类重写
      */
-    template<typename RequestType, typename ResponseType>
-    class ICallData : public CallDataBase {
-        template<typename GrpcServiceType, typename CallDataType, typename BusinessServiceType>
-        friend class CallDataManager;
-
+    template<typename RequestType, typename ResponseType, typename ManagerType, typename SpecificCallDataType>
+    class CallData : public ICallData {
+        // template<typename GrpcServiceType, typename CallDataType, typename BusinessServiceType, typename Derived>
+        // friend class CallDataManager;
     public:
-        ICallData(ICallDataManager *manager) : CallDataBase(manager), responder_(&ctx_) {
+        explicit CallData(ManagerType* manager) : manager_(manager), responder_(&ctx_) {
         }
 
-        ~ICallData() override = default;;
+        ~CallData() override = default;
 
         void Proceed() override {
             switch (status_) {
@@ -72,7 +66,7 @@ namespace user_service::adapter::v2 {
             status_ = State::WAIT_PROCESSING;
             Reset();
             // 通过管理器，把自己重新注册给 CQ
-            manager_->RegisterCallData(this);
+            manager_->RegisterCallDataToCQ(static_cast<SpecificCallDataType*>(this));
         }
 
         void Reset() {
@@ -87,8 +81,12 @@ namespace user_service::adapter::v2 {
             request_ = RequestType();
         }
 
+        boost::asio::awaitable<void> RunLogic() {
+            SpecificCallDataType* derived_this = static_cast<SpecificCallDataType*>(this);
+            co_await derived_this->RunSpecificLogic();
+        }
         // 具体的业务逻辑需要子类重写
-        virtual boost::asio::awaitable<void> RunLogic() = 0;
+        // virtual boost::asio::awaitable<void> RunLogic() = 0;
 
         // 业务逻辑完成，注册回 CQ
         void OnLogicFinished(std::exception_ptr e) {
@@ -107,7 +105,7 @@ namespace user_service::adapter::v2 {
                 status = grpc::Status(grpc::StatusCode::INTERNAL, error_message);
             } else {
                 // 协程成功完成
-                SPDLOG_DEBUG("Coroutine finished successfully for user: {}", request_.username());
+                SPDLOG_DEBUG("Coroutine finished successfully");
                 status = grpc::Status::OK;
             }
             // 调用 Finish 就是把自己放回 CQ
@@ -115,11 +113,10 @@ namespace user_service::adapter::v2 {
         }
 
     protected:
+        ManagerType* manager_;
         RequestType request_;
         ResponseType reply_;
         grpc::ServerContext ctx_;
-
-    private:
         grpc::ServerAsyncResponseWriter<ResponseType> responder_;
     };
 }

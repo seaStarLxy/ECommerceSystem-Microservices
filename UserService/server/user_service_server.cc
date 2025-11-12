@@ -2,11 +2,10 @@
 // All Rights Reserved.
 
 #include "user_service_server.h"
-#include "adapter/v2/interface/i_call_data.hpp"
 #include <boost/asio/io_context.hpp>
 #include <spdlog/spdlog.h>
 
-#include "adapter/v2/include/register_call_data.h"
+#include "adapter/v2/call_data_manager/include/register_call_data_manager.h"
 
 using namespace user_service::server;
 using namespace user_service::adapter::v2;
@@ -31,10 +30,12 @@ void UserServiceServer::Run() {
 
 
     // (new RegisterCallData(&service_, cq_.get(), *ioc_, basic_service_))->Init();
-    SPDLOG_DEBUG("Seeded 1st RegisterCallData.");
-    auto manager = CallDataManager<proto::v1::UserService::AsyncService, RegisterCallData, service::IBasicUserService>(100,
-        &service_, basic_service_.get(), ioc_, cq_.get());
-    manager.Start();
+    SPDLOG_DEBUG("Seeded RegisterCallData.");
+    auto register_manager = RegisterCallDataManager(100, &service_, basic_service_.get(), ioc_, cq_.get());
+    // auto send_code_manager = CallDataManager<proto::v1::UserService::AsyncService, SendCodeCallData, service::IAuthService>(100,
+    //     &service_, auth_service_.get(), ioc_, cq_.get());
+    register_manager.Start();
+    // send_code_manager.Start();
 
 
     // 启动 Worker 线程池
@@ -69,6 +70,6 @@ void UserServiceServer::HandleRpc() const {
             break;
         }
         SPDLOG_DEBUG("Get one request");
-        static_cast<CallDataBase*>(tag)->Proceed();
+        static_cast<ICallData*>(tag)->Proceed();
     }
 }
