@@ -1,0 +1,17 @@
+// Copyright (c) 2025 seaStarLxy.
+// All Rights Reserved.
+
+#include "adapter/v2/call_data_manager/include/send_code_call_data_manager.h"
+#include "adapter/v2/call_data/include/send_code_call_data.h"
+
+using namespace user_service::adapter::v2;
+
+SendCodeCallDataManager::SendCodeCallDataManager(const size_t initial_size, proto::v1::AuthService::AsyncService* grpc_service,
+            service::IAuthService* business_service, const std::shared_ptr<boost::asio::io_context>& ioc,
+            grpc::ServerCompletionQueue *cq): CallDataManager(initial_size, grpc_service, business_service, ioc, cq) {}
+
+SendCodeCallDataManager::~SendCodeCallDataManager() = default;
+
+void SendCodeCallDataManager::SpecificRegisterCallDataToCQ(SendCodeCallData* call_data) const {
+    grpc_service_->RequestSendCode(call_data->GetContextAddress(), call_data->GetRequestAddress(), call_data->GetResponderAddress(), cq_, cq_, call_data);
+}

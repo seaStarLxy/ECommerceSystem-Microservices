@@ -10,13 +10,16 @@
 
 namespace user_service::adapter::v2 {
 
-    // template<typename T>
-    // concept HadSpecificLogic = requires(T& derived) {
-    //     // requires 语句检查：
-    //     // 1. 是否存在一个名为 RunSpecificLogic 的成员函数
-    //     // 2. 它被调用时，返回的类型是否与 boost::asio::awaitable<void> 相同
-    //     { derived.RunSpecificLogic() } -> std::same_as<boost::asio::awaitable<void>>;
-    // };
+    template<typename T>
+    concept HasRunSpecificLogic = requires(T& derived) {
+        // 传入 T& 是因为如果传入T，T是必须可移动可复制的，但T& 没有这个要求
+        /*
+         * requires 语句检查：
+         * 1. 是否存在一个名为 RunSpecificLogic 的成员函数
+         * 2. 它被调用时，返回的类型是否与 boost::asio::awaitable<void> 相同
+         */
+        { derived.RunSpecificLogic() } -> std::same_as<boost::asio::awaitable<void>>;
+    };
 
     /*
      * 特定类型的 CallData 的公共部分，即：让编译器替我生成每个接口对应的CallData。
@@ -24,10 +27,9 @@ namespace user_service::adapter::v2 {
      */
     template<typename RequestType, typename ResponseType, typename ManagerType, typename SpecificCallDataType>
     class CallData : public ICallData {
-        // template<typename GrpcServiceType, typename CallDataType, typename BusinessServiceType, typename Derived>
-        // friend class CallDataManager;
     public:
-        explicit CallData(ManagerType* manager) : manager_(manager), responder_(&ctx_) {
+        explicit CallData(ManagerType* manager) : status_(State::WAIT_PROCESSING), manager_(manager), responder_(&ctx_) {
+            static_assert(std::is_base_of_v<ICallDataManager, ManagerType>, "ManagerType must derive from ICallDataManager");
         }
 
         ~CallData() override = default;
@@ -81,8 +83,8 @@ namespace user_service::adapter::v2 {
             request_ = RequestType();
         }
 
-        boost::asio::awaitable<void> RunLogic() {
-            SpecificCallDataType* derived_this = static_cast<SpecificCallDataType*>(this);
+        boost::asio::awaitable<void> RunLogic() requires HasRunSpecificLogic<SpecificCallDataType> {
+            auto* derived_this = static_cast<SpecificCallDataType*>(this);
             co_await derived_this->RunSpecificLogic();
         }
         // 具体的业务逻辑需要子类重写
@@ -111,8 +113,23 @@ namespace user_service::adapter::v2 {
             // 调用 Finish 就是把自己放回 CQ
             responder_.Finish(reply_, status, this);
         }
+    private:
+        // 仅内部使用，call data manager 友元可访问，但不该访问
+        enum class State { WAIT_PROCESSING, FINISHED };
+        State status_;
 
+    // 供 call data 子类使用，此处需要设置为 protected
     protected:
+        // 提供成员变量的私有方法供对应 manager(友元) 调用
+        RequestType* GetRequestAddress() {
+            return &request_;
+        }
+        grpc::ServerContext* GetContextAddress() {
+            return &ctx_;
+        }
+        grpc::ServerAsyncResponseWriter<ResponseType>* GetResponderAddress() {
+            return &responder_;
+        }
         ManagerType* manager_;
         RequestType request_;
         ResponseType reply_;
