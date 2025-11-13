@@ -17,10 +17,10 @@ RegisterCallData::~RegisterCallData() = default;
 boost::asio::awaitable<void> RegisterCallData::RunSpecificLogic() {
     SPDLOG_DEBUG("run RunLogic");
     auto* basic_user_service = manager_->GetBusinessService();
-    const RegisterRequest register_request(request_.username(), request_.password(),
+    const service::RegisterRequest register_request(request_.username(), request_.password(),
         request_.phone_number(), request_.code());
     SPDLOG_DEBUG("ready to enter coroutine");
-    RegisterResponse register_response = co_await basic_user_service->Register(register_request);
+    service::RegisterResponse register_response = co_await basic_user_service->Register(register_request);
     SPDLOG_DEBUG("leave from coroutine");
     reply_.set_user_id(register_response.user_id);
     reply_.set_token(register_response.token);

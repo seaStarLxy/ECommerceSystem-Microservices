@@ -4,17 +4,19 @@
 #pragma once
 #include <string>
 
-struct RegisterRequest {
-    std::string username;
-    std::string password;
-    std::string phone_number;
-    std::string code;
-};
+namespace user_service::service {
+    struct RegisterRequest {
+        std::string username;
+        std::string password;
+        std::string phone_number;
+        std::string code;
+    };
 
-struct RegisterResponse {
-    std::string user_id;
-    std::string token;
-};
+    struct RegisterResponse {
+        std::string user_id;
+        std::string token;
+    };
+}
 
 struct GetUserInfoRequest {
     std::string user_id;

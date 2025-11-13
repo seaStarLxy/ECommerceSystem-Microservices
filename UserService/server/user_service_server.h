@@ -24,12 +24,13 @@ namespace user_service::server
     private:
         void HandleRpc() const;
         std::unique_ptr<grpc::ServerCompletionQueue> cq_;
-        proto::v1::UserService::AsyncService service_;
+        proto::v1::AuthService::AsyncService auth_grpc_service_;
+        proto::v1::UserService::AsyncService basic_user_grpc_service_;
         std::unique_ptr<grpc::Server> server_;
         std::vector<std::thread> worker_threads_;
 
         const std::shared_ptr<boost::asio::io_context> ioc_;
-        std::shared_ptr<service::IAuthService> auth_service_;
-        std::shared_ptr<service::IBasicUserService> basic_service_;
+        std::shared_ptr<service::IAuthService> auth_business_service_;
+        std::shared_ptr<service::IBasicUserService> basic_user_business_service_;
     };
 }

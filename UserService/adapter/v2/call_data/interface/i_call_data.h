@@ -11,14 +11,11 @@
 namespace user_service::adapter::v2 {
     class ICallData {
     public:
-        explicit ICallData(): status_(State::WAIT_PROCESSING) {}
+        explicit ICallData() {}
         virtual ~ICallData() = default;
 
         // HandleRpc 中 CQ 给出返回 calldata 时调用，用于驱动 calldata
         virtual void Proceed() = 0;
-    protected:
-        enum class State { WAIT_PROCESSING, FINISHED };
-        State status_;
     };
 
 
