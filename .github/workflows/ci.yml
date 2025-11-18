@@ -9,8 +9,6 @@ on:
 env:
   VCPKG_ROOT: ${{ github.workspace }}/vcpkg
   BUILD_DIR: ${{ github.workspace }}/UserService/build
-  # 启用 vcpkg 的 GHA 二进制缓存
-  VCPKG_BINARY_SOURCES: "clear;gha;readwrite"
 
 jobs:
   build_and_test:
@@ -48,6 +46,17 @@ jobs:
 
       - name: 2.2 Bootstrap vcpkg
         run: ${{ env.VCPKG_ROOT }}/bootstrap-vcpkg.sh
+
+      - name: 2.3 Setup vcpkg binary cache
+        uses: actions/cache@v4
+        with:
+          # vcpkg 在 Linux runner 上的默认二进制缓存路径
+          path: ~/.cache/vcpkg
+          # 当 vcpkg.json 文件内容改变时，缓存的 key 改变
+          key: vcpkg-binary-cache-${{ runner.os }}-${{ hashFiles('**/vcpkg.json') }}
+          # Fallback key
+          restore-keys: |
+            vcpkg-binary-cache-${{ runner.os }}-
 
       - name: 3. Configure CMake
         run: |
