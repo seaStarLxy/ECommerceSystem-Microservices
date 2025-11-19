@@ -14,7 +14,7 @@ BasicUserService::~BasicUserService() = default;
 
 boost::asio::awaitable<RegisterResponse> BasicUserService::Register(const RegisterRequest& register_request) {
     std::string prefix("Hello,  ");
-    RegisterResponse register_response(prefix+register_request.username, register_request.code);
+    RegisterResponse register_response(CommonStatus::Success(), prefix+register_request.username);
     SPDLOG_DEBUG("register_response: {}", register_response.user_id);
     co_return register_response;
 }

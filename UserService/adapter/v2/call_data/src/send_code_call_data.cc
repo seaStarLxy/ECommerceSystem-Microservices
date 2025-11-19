@@ -4,6 +4,7 @@
 #include "adapter/v2/call_data/include/send_code_call_data.h"
 #include "adapter/v2/call_data_manager/include/send_code_call_data_manager.h"
 #include "service/interface/i_auth_service.h"
+#include "service/model/common_model.h"
 
 using namespace user_service::adapter::v2;
 
@@ -21,6 +22,8 @@ boost::asio::awaitable<void> SendCodeCallData::RunSpecificLogic() {
     SPDLOG_DEBUG("ready to enter coroutine");
     service::SendCodeResponse send_code_response = co_await auth_service->SendCode(send_code_request);
     SPDLOG_DEBUG("leave from coroutine");
-    reply_.set_status(send_code_response.status);
+    proto::v1::CommonStatus* status = reply_.mutable_status();
+    status->set_code(static_cast<std::int32_t>(send_code_response.status.code));
+    status->set_message(send_code_response.status.message);
     co_return;
 }

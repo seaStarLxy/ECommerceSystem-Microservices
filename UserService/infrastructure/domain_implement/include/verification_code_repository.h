@@ -3,7 +3,7 @@
 
 #pragma once
 #include "domain/interface/i_verification_code_repository.h"
-#include "infrastructure/state_storage/redis/redis_client.h"
+#include "infrastructure/state_storage/redis_dao/redis_client.h"
 #include "service/model/auth_model.h"
 
 namespace user_service::infrastructure

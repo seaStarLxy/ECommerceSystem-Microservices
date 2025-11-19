@@ -6,11 +6,14 @@
 #include <boost/di.hpp>
 #include "infrastructure/asio_thread_pool/asio_thread_pool.h"
 #include "infrastructure/domain_implement/include/verification_code_repository.h"
-#include "infrastructure/state_storage/redis/redis_client.h"
+#include "infrastructure/state_storage/redis_dao/redis_client.h"
 #include "service/include/auth_service.h"
 #include "service/include/basic_user_service.h"
 #include "utils/include/verification_code_generator.h"
 #include <boost/redis/src.hpp>
+
+#include "infrastructure/persistence/postgresql/include/async_connection_pool.h"
+#include "infrastructure/persistence/dao/user_dao.h"
 
 
 using namespace user_service::infrastructure;
@@ -36,6 +39,8 @@ auto CreateInjector(const std::shared_ptr<boost::asio::io_context>& ioc_ptr, con
     // 注意这里的di内部会对类型解析，所以无法使用前向声明，必须把使用include头文件
     return di::make_injector(
         di::bind<boost::asio::io_context>().to(ioc_ptr),
+        di::bind<AsyncConnectionPool>().in(di::singleton),
+        di::bind<UserDao>().in(di::singleton),
         di::bind<RedisConfig>().to(redis_config),
         di::bind<RedisClient>().in(di::singleton),
         di::bind<IVerificationCodeGenerator>().to<CodeGenerator>().in(di::singleton),
