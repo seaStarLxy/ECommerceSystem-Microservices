@@ -3,6 +3,7 @@
 
 #pragma once
 #include <string>
+#include <cstdint>
 
 namespace user_service::service {
     enum class ErrorCode: std::int32_t {
