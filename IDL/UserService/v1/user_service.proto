@@ -59,8 +59,13 @@ service UserService {
   }
 }
 
-// 消息体定义 (Messages)
+// 消息体定义
 // 通用实体
+message CommonStatus {
+  int32 code = 1;         // 0 代表成功，非 0 代表业务失败码 (例如 10001)
+  string message = 2;     // 错误信息或成功提示
+}
+
 message User {
   string user_id = 1;
   string username = 2;
@@ -70,18 +75,19 @@ message User {
 }
 
 // AuthService 消息体
-message SendCodeRequest {
-  string phone_number = 1;
-  CodeUsage usage = 2;
-}
 enum CodeUsage {
   UNKNOWN = 0;
   USER_REGISTER = 1;
   USER_LOGIN = 2;
   RESET_PASSWORD = 3;
 }
+message SendCodeRequest {
+  string phone_number = 1;
+  CodeUsage usage = 2;
+}
+
 message SendCodeResponse {
-  bool status = 1;
+  CommonStatus status = 1;
 }
 
 message LoginByPasswordRequest {
@@ -93,8 +99,9 @@ message LoginByCodeRequest {
   string code = 2;
 }
 message LoginResponse {
-  string token = 1;
-  User user = 2;
+  CommonStatus status = 1;
+  string token = 2;
+  User user = 3;
 }
 
 // UserService 消息体
@@ -105,20 +112,21 @@ message RegisterRequest {
   string code = 4;
 }
 message RegisterResponse {
-  string user_id = 1;
-  string token = 2;
+  CommonStatus status = 1;
+  string user_id = 2;
 }
 
 message GetUserInfoRequest {
   string user_id = 1;
 }
 message GetUserInfoResponse {
-  User user = 1;
+  CommonStatus status = 1;
+  User user = 2;
 }
 
 message UpdateUserInfoRequest {
   User user = 1;
 }
 message UpdateUserInfoResponse {
-  bool status = 1;
+  CommonStatus status = 1;
 }

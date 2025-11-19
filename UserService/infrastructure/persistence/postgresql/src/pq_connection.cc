@@ -3,7 +3,7 @@
 
 #include "../include/pq_connection.h"
 
-using namespace common::db;
+using namespace user_service::infrastructure;
 
 PQConnection::PQConnection(boost::asio::io_context &ioc) : conn_(nullptr, &PQfinish), socket_(ioc) {
 }

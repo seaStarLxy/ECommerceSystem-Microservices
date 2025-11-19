@@ -3,7 +3,7 @@
 
 #include "../include/async_connection_pool.h"
 
-using namespace common::db;
+using namespace user_service::infrastructure;
 
 
 AsyncConnectionPool::AsyncConnectionPool(boost::asio::io_context &ioc, std::string conn_str, int pool_size)

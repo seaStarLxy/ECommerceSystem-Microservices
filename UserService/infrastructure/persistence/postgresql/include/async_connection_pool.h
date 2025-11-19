@@ -9,7 +9,7 @@
 #include <boost/asio/experimental/channel.hpp>
 #include <spdlog/spdlog.h>
 
-namespace common::db {
+namespace user_service::infrastructure {
     class AsyncConnectionPool;
     // Deleter 的工作不是 delete 连接，而是将其归还给连接池
     struct ConnectionReleaser {

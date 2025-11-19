@@ -86,7 +86,7 @@ set(SERVICE_FILES
 )
 
 set(DOMAIN_FILES
-#    "${CMAKE_CURRENT_SOURCE_DIR}/"
+    "${CMAKE_CURRENT_SOURCE_DIR}/domain/user.cc"
 )
 
 set(INFRASTRUCTURE_FILES
@@ -95,8 +95,9 @@ set(INFRASTRUCTURE_FILES
         # persistence
         "${CMAKE_CURRENT_SOURCE_DIR}/infrastructure/persistence/postgresql/src/pq_connection.cc"
         "${CMAKE_CURRENT_SOURCE_DIR}/infrastructure/persistence/postgresql/src/async_connection_pool.cc"
+        "${CMAKE_CURRENT_SOURCE_DIR}/infrastructure/persistence/dao/user_dao.cc"
         # state_storage
-        "${CMAKE_CURRENT_SOURCE_DIR}/infrastructure/state_storage/redis/redis_client.cc"
+        "${CMAKE_CURRENT_SOURCE_DIR}/infrastructure/state_storage/redis_dao/redis_client.cc"
         # asio_thread_pool
         "${CMAKE_CURRENT_SOURCE_DIR}/infrastructure/asio_thread_pool/asio_thread_pool.cc"
 )

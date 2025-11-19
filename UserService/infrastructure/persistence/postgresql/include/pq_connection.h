@@ -8,7 +8,7 @@
 #include <vector>
 #include <memory>
 
-namespace common::db {
+namespace user_service::infrastructure {
     using PGResultPtr = std::unique_ptr<PGresult, decltype(&PQclear)>;
 
     class PQConnection : public std::enable_shared_from_this<PQConnection> {

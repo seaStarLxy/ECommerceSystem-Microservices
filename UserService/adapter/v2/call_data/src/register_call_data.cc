@@ -22,7 +22,9 @@ boost::asio::awaitable<void> RegisterCallData::RunSpecificLogic() {
     SPDLOG_DEBUG("ready to enter coroutine");
     service::RegisterResponse register_response = co_await basic_user_service->Register(register_request);
     SPDLOG_DEBUG("leave from coroutine");
+    proto::v1::CommonStatus* status = reply_.mutable_status();
+    status->set_code(static_cast<std::int32_t>(register_response.status.code));
+    status->set_message(register_response.status.message);
     reply_.set_user_id(register_response.user_id);
-    reply_.set_token(register_response.token);
     co_return;
 }
