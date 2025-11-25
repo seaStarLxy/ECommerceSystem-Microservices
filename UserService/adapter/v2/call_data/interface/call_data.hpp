@@ -1,5 +1,5 @@
 // Copyright (c) 2025 seaStarLxy.
-// All Rights Reserved.
+// Licensed under the MIT License.
 
 #pragma once
 #include "adapter/v2/call_data/interface/i_call_data.h"

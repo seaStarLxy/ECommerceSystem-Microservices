@@ -1,4 +1,4 @@
 // Copyright (c) 2025 seaStarLxy.
-// All Rights Reserved.
+// Licensed under the MIT License.
 
 #include <boost/redis/src.hpp>

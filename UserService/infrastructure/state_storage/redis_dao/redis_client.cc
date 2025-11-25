@@ -1,5 +1,5 @@
 // Copyright (c) 2025 seaStarLxy.
-// All Rights Reserved.
+// Licensed under the MIT License.
 
 #include "redis_client.h"
 #include <spdlog/spdlog.h>

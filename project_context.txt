@@ -1,0 +1,3310 @@
+Below is the entire codebase context. Please analyze it based on the user's request.
+
+='='=' File: ./README.md '='='='
+```
+# ECommerce System
+
+## 前言
+
+项目始于2025年10月，基于 NUS-ISS-SE 课程，尽可能以企业级标准实现， 
+针对所学内容进行实践。主要基于以下技术考量：
+1. 如何构建**可扩展**解决方案
+2. 如何部署服务、治理服务
+3. 核心质量属性: **性能**、可扩展、安全
+
+### 技术栈
+|  类型  |     选型      |     备注     |
+|:----:|:-----------:|:----------:|
+|  语言  |    C++20    | boost & 协程 |
+|  通信  | REST & grpc |   异步grpc   |
+|  架构  |     微服务     |   部分云原生    |
+|  网关  |    envoy    |            |
+| 持久化  | Postgresql  |            |
+|  缓存  |    Redis    |            |
+|  部署  |     k8s     |    待实现     |
+| 服务治理 |             |    待实现     |
+
+
+### 技术要点
+1. 编译 grpc，并打包开发环境 docker 镜像
+2. 编写 cmake，一站式编译 Protobuf
+3. 基于 CallData， 实现异步 grpc
+4. 添加 envoy，实现 RESTful API 自动转换 grpc 请求
+5. 基于 pqlib 实现异步数据库连接和连接池（封装协程）
+6. 耦合监听线程和协程（协程启动）
+7. 架构分层，基于领域驱动设计，实现充血 domain 对象
+8. boost di 管理依赖注入实现控制反转
+9. CallData 封装（3层继承&模版&内存极致优化&安全控制&CRTP&概念约束）
+10. 对象池(Manager模版)复用CallData
+11. main 优化
+12. 封装 grpc 客户端调用为协程
+13. saga模式: 保证微服务事务
+
+待定事件（未提上日程）：对象池的动态伸缩（无锁队列）
+
+
+## 技术细节
+
+### C++依赖
+|    依赖库     |       作用        |       备注       |
+|:----------:|:---------------:|:--------------:|
+| googleapis | 提供 REST-grpc 转化 |                |
+|   boost    |   提供协程管理&相关特性   |  实验性方案具有时效性！   |
+|   libpq    |    提供数据库同步接口    | postgresql 数据库 |
+| moodycamel |     提供无锁队列      |     暂时未启用      |
+|   spdlog   |      日志管理       |                |
+|  cryptopp  |      密码加密       |                |
+|  uuid_v7   |     唯一id管理      |                |
+|  boost_di  |     提供依赖注入      |                |
+|  jwt-cpp   |     提供jwt认证     |                |
+|  yaml-cpp  |     管理配置文件      |                |
+
+
+### 数据库连接
+
+### 数据库连接池
+
+### grpc 异步实现
+
+### CallData 封装（3层继承&模版&内存极致优化&安全控制&CRTP&概念约束）
+> 这一部分的设计技术颇为广泛，耗时最久，实现巨难，有时间记得先补充这里
+
+
+## 开发环境部署
+
+### 1. 源代码拉取
+> 务必注意：本项目包含 Git 子模块
+```bash
+# 首次克隆项目，务必使用 `--recursive` 参数同时克隆子模块。
+git clone --recursive <Project URL>
+```
+
+```bash
+# 如果已经克隆了项目，但忘记添加 `--recursive` 参数，或者子模块目录为空，运行以下命令初始化并拉取子模块。
+git submodule update --init --recursive
+```
+
+### 2. 编译环境部署
+#### 安装基础工具
+```bash
+sudo apt update
+sudo apt install -y build-essential pkg-config ninja-build zip unzip tar libssl-dev curl gdb  bison flex autoconf automake libtool git net-tools
+```
+
+#### 安装 vcpkg
+```bash
+git clone https://github.com/microsoft/vcpkg.git ~/vcpkg
+~/vcpkg/bootstrap-vcpkg.sh
+echo "" >> ~/.bashrc
+echo "# vcpkg config" >> ~/.bashrc
+echo "export VCPKG_ROOT=~/vcpkg" >> ~/.bashrc
+echo 'export PATH=$VCPKG_ROOT:$PATH' >> ~/.bashrc
+source ~/.bashrc
+```
+
+#### cmake 参数
+> -DCMAKE_TOOLCHAIN_FILE=~/vcpkg/scripts/buildsystems/vcpkg.cmake
+
+### 3. envoy 部署
+#### 安装
+```shell
+wget -O- https://apt.envoyproxy.io/signing.key | sudo gpg --dearmor -o /etc/apt/keyrings/envoy-keyring.gpg
+echo "deb [signed-by=/etc/apt/keyrings/envoy-keyring.gpg] https://apt.envoyproxy.io bookworm main" | sudo tee /etc/apt/sources.list.d/envoy.list
+sudo apt update
+sudo apt install envoy
+envoy --version
+```
+
+#### 启动
+
+```shell
+# 生成 proto.pb
+~/ECommerceSystem-Microservices/UserService/cmake-build-debug/vcpkg_installed/x64-linux/tools/protobuf/protoc \
+  -I ~/ECommerceSystem-Microservices/IDL \
+  -I ~/ECommerceSystem-Microservices/third_party/googleapis \
+  --include_imports \
+  --descriptor_set_out=~/ECommerceSystem-Microservices/apiGateway/proto.pb \
+  ~/ECommerceSystem-Microservices/IDL/UserService/v1/user_service.proto
+```
+```shell
+# 前台运行 envoy
+envoy -c ~/ECommerceSystem-Microservices/apiGateway/envoy.yaml -l info
+```
+
+### 4. 数据库安装
+1. 持久化: Postgresql
+2. 状态管理: Redis
+  
+## 项目开发
+
+### 1. 命名规则
+- 类/结构体: PascalCase (大驼峰) - MyClass
+- 函数/方法: PascalCase (大驼峰) - MyFunction
+- 文件名: snake_case (蛇形) - my_file.h
+- 变量名: snake_case (蛇形) - my_variable (成员变量加 _ 后缀)
+- 命名空间: snake_case (蛇形) - my_namespace
+
+
+### 2. 分支命名规则
+- feature: 开发新功能
+- bugfix: 修复bug
+- chore: 修改配置等
+- refactor: 大规模重构
+
+
+### 3. 开发规范
+1. 开发前check out main
+2. 根据*分支命名规则*创建分支
+3. 进行开发后add commit push
+4. CICD 不通过需重新 commit 后提交
+
+```shell
+# 从main开始创建新分支工作
+git checkout main
+git pull
+git checkout -b {new_branch_name}
+# 此时进行开发
+# 开发结束后可能需要分支改名（切换到需要改名的分支）
+git branch -m {new_branch_name}
+git add .
+git commit -s -m "{your_commit_message}"
+git push -u origin {new_branch_name}
+# 发生修改则重复 commit 和 push
+```
+
+
+```
+
+='='=' File: ./envBuild/v1/docker-compose.yml '='='='
+```
+name: ECommerceSystem
+services:
+  grpc-dev:
+    image: grpc-dev:v2
+    container_name: grpc-dev
+    restart: unless-stopped
+    ports:
+      - "10022:22"
+    volumes:
+      - ..:/app
+      - clion_cache:/root/.cache/JetBrains  # 持久化 clion 后端环境
+    depends_on:
+      - postgres-db
+      - redis-cache
+    networks:
+      - grpc-net
+
+  # Envoy 网关服务
+  envoy-gateway:
+    image: envoyproxy/envoy:contrib-v1.34.9
+    container_name: envoy-gateway
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - ../apiGateway/envoy.yaml:/etc/envoy/envoy.yaml
+      - ../apiGateway/proto.pb:/etc/envoy/proto.pb
+    networks:
+      - grpc-net
+    depends_on:
+      - grpc-dev
+
+  # Postgresql 持久化
+  postgres-db:
+    image: postgres:14-alpine
+    container_name: postgres-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: lxy
+      POSTGRES_PASSWORD: 1234
+      POSTGRES_DB: ecommerce_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - grpc-net
+
+  redis-cache:
+    image: redis:7-alpine
+    container_name: redis-cache
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - grpc-net
+
+volumes:
+  clion_cache:
+  postgres-data:
+  redis-data:
+
+networks:
+  grpc-net:
+    driver: bridge
+```
+
+='='=' File: ./envBuild/v1/Readme.md '='='='
+```
+
+构建开发环境
+docker build -t grpc-dev:v1 .
+docker build -t grpc-dev:v2 .
+
+docker run -it --rm --name temp-test -v ..:/app grpc-dev:v2 bash
+
+构建运行环境
+docker build -t customized-grpc:v1 .
+
+docker-compose up -d
+
+docker-compose down
+
+> extra: 
+curl
+sudo apt install libboost-all-dev
+> apt install libboost-coroutine-dev
+
+> zip unzip tar
+>
+
+# grpc-dev-wsl
+```shell
+git
+sudo apt install curl zip unzip tar build-essential 
+```
+
+```
+
+='='=' File: ./envBuild/v2/Readme.md '='='='
+```
+# 基于 wsl 开发环境部署
+```shell
+# 额外安装部分
+sudo apt install curl zip unzip tar build-essential gdb pkg-config bison flex autoconf
+```
+
+```shell
+cd envBuild/v2
+docker run -d \
+  --name envoy-gateway-v2 \
+  -p 8080:8080 \
+  --restart unless-stopped \
+  -v "$(pwd)/../../apiGateway/envoy.yaml":/etc/envoy/envoy.yaml \
+  -v "$(pwd)/../../apiGateway/proto.pb":/etc/envoy/proto.pb \
+  envoyproxy/envoy:contrib-v1.34.9
+```
+
+
+```
+
+='='=' File: ./IDL/UserService/v1/user_service.proto '='='='
+```
+syntax = "proto3";
+
+package user_service.proto.v1;
+
+import "google/api/annotations.proto";
+
+
+// 1. AuthService (认证服务)
+service AuthService {
+  // 发送验证码
+  rpc SendCode(SendCodeRequest) returns (SendCodeResponse) {
+    option (google.api.http) = {
+      post: "/v1/auth/send_code"
+      body: "*"
+    };
+  }
+
+  // 密码登录
+  rpc LoginByPassword(LoginByPasswordRequest) returns (LoginResponse) {
+    option (google.api.http) = {
+      post: "/v1/auth/login_by_password"
+      body: "*"
+    };
+  }
+
+  // 验证码登录
+  rpc LoginByCode(LoginByCodeRequest) returns (LoginResponse) {
+    option (google.api.http) = {
+      post: "/v1/auth/login_by_code"
+      body: "*"
+    };
+  }
+}
+
+
+// 2. UserService (用户服务)
+service UserService {
+  // 用户注册 (使用验证码)
+  rpc Register(RegisterRequest) returns (RegisterResponse) {
+    option (google.api.http) = {
+      post: "/v1/users/register"
+      body: "*"
+    };
+  }
+
+  // 获取用户信息
+  rpc GetUserInfo(GetUserInfoRequest) returns (GetUserInfoResponse) {
+    option (google.api.http) = {
+      get: "/v1/users/{user_id}"
+    };
+  }
+
+  // 修改用户信息
+  rpc UpdateUserInfo(UpdateUserInfoRequest) returns (UpdateUserInfoResponse) {
+    option (google.api.http) = {
+      put: "/v1/users/{user.user_id}" // (使用 PATCH 语义)
+      body: "user"
+    };
+  }
+}
+
+// 消息体定义
+// 通用实体
+message CommonStatus {
+  int32 code = 1;         // 0 代表成功，非 0 代表业务失败码 (例如 10001)
+  string message = 2;     // 错误信息或成功提示
+}
+
+message User {
+  string user_id = 1;
+  string username = 2;
+  string email = 3;
+  string avatar_url = 4;
+  string phone_number = 5;
+}
+
+// AuthService 消息体
+enum CodeUsage {
+  UNKNOWN = 0;
+  USER_REGISTER = 1;
+  USER_LOGIN = 2;
+  RESET_PASSWORD = 3;
+}
+message SendCodeRequest {
+  string phone_number = 1;
+  CodeUsage usage = 2;
+}
+
+message SendCodeResponse {
+  CommonStatus status = 1;
+}
+
+message LoginByPasswordRequest {
+  string username = 1;
+  string password = 2;
+}
+message LoginByCodeRequest {
+  string phone_number = 1;
+  string code = 2;
+}
+message LoginResponse {
+  CommonStatus status = 1;
+  string token = 2;
+  User user = 3;
+}
+
+// UserService 消息体
+message RegisterRequest {
+  string username = 1;
+  string password = 2;
+  string phone_number = 3;
+  string code = 4;
+}
+message RegisterResponse {
+  CommonStatus status = 1;
+  string user_id = 2;
+}
+
+message GetUserInfoRequest {
+  string user_id = 1;
+}
+message GetUserInfoResponse {
+  CommonStatus status = 1;
+  User user = 2;
+}
+
+message UpdateUserInfoRequest {
+  User user = 1;
+}
+message UpdateUserInfoResponse {
+  CommonStatus status = 1;
+}
+```
+
+='='=' File: ./UserService/main.cc '='='='
+```
+// Copyright (c) 2025 seaStarLxy.
+// Licensed under the MIT License.
+
+#include <spdlog/spdlog.h>
+#include "server/application.h"
+
+using namespace user_service::server;
+namespace di = boost::di;
+
+void LogInit() {
+    spdlog::set_level(spdlog::level::trace);
+    spdlog::set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%l] [thread %t] [%s:%# (%!)] %v");
+}
+
+int main() {
+    LogInit();
+    try {
+        const Application app("config/config.yaml");
+        app.Run();
+    } catch (...) {
+        return -1;
+    }
+    return 0;
+}
+
+```
+
+='='=' File: ./UserService/CMakeLists.txt '='='='
+```
+cmake_minimum_required(VERSION 3.20)
+project(UserService LANGUAGES CXX)
+
+# 注意协程需要 C20 标准以上
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+find_package(gRPC REQUIRED)
+message(STATUS "Found gRPC: ${gRPC_FOUND}")
+find_package(PostgreSQL REQUIRED)
+message(STATUS "Found PostgreSQL: ${PostgreSQL_FOUND}")
+find_package(OpenSSL REQUIRED)
+find_package(stduuid CONFIG REQUIRED)
+find_package(jwt-cpp CONFIG REQUIRED)
+find_package(cryptopp REQUIRED)
+find_package(yaml-cpp CONFIG REQUIRED)
+find_package(spdlog CONFIG REQUIRED)
+add_compile_definitions(SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_TRACE)
+
+
+# 自定义 IDL 目录
+set(MY_IDL_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../IDL")
+# google IDL 目录
+set(GOOGLEAPIS_PROTOS_DIR "../third_party/googleapis")
+# 收集 自定义IDL和其依赖 google IDL 目录中的 .proto 文件
+set(PROTO_FILES
+        "${MY_IDL_DIR}/UserService/v1/user_service.proto"
+        "${GOOGLEAPIS_PROTOS_DIR}/google/api/annotations.proto"
+        "${GOOGLEAPIS_PROTOS_DIR}/google/api/http.proto"
+)
+message(STATUS "Proto files: ${PROTO_FILES}")
+
+
+# 生成文件存放目录
+set(PROTO_BINARY_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
+file(MAKE_DIRECTORY ${PROTO_BINARY_DIR})
+# 注册自定义临时库目标
+add_library(my_proto_lib OBJECT
+        ${PROTO_FILES}
+)
+target_link_libraries(my_proto_lib PUBLIC protobuf::libprotobuf)
+target_include_directories(my_proto_lib PUBLIC "$<BUILD_INTERFACE:${PROTO_BINARY_DIR}>")
+# 1. 生成 .pb.h 和 .pb.cc
+# 2. 添加到 my_proto_lib 临时库
+protobuf_generate(
+        TARGET my_proto_lib
+        LANGUAGE cpp
+        IMPORT_DIRS
+        "${GOOGLEAPIS_PROTOS_DIR}"
+        "${MY_IDL_DIR}"
+        PROTOC_OUT_DIR "${PROTO_BINARY_DIR}"
+        GENERATE_EXTENSIONS .pb.h .pb.cc
+)
+protobuf_generate(
+        TARGET my_proto_lib
+        LANGUAGE grpc
+        IMPORT_DIRS
+        "${GOOGLEAPIS_PROTOS_DIR}"
+        "${MY_IDL_DIR}"
+        PROTOC_OUT_DIR "${PROTO_BINARY_DIR}"
+        GENERATE_EXTENSIONS .grpc.pb.h .grpc.pb.cc
+        PLUGIN "protoc-gen-grpc=$<TARGET_FILE:gRPC::grpc_cpp_plugin>"
+)
+
+
+# 收集源文件
+set(SERVER_FILES
+        "${CMAKE_CURRENT_SOURCE_DIR}/server/user_service_server.cc"
+        "${CMAKE_CURRENT_SOURCE_DIR}/server/application.cc"
+)
+
+set(ADAPTER_FILES
+        #        v1
+        #        "${CMAKE_CURRENT_SOURCE_DIR}/adapter/v1/src/register_call_data.cc"
+        #         v2
+        "${CMAKE_CURRENT_SOURCE_DIR}/adapter/v2/call_data_manager/src/register_call_data_manager.cc"
+        "${CMAKE_CURRENT_SOURCE_DIR}/adapter/v2/call_data/src/register_call_data.cc"
+        "${CMAKE_CURRENT_SOURCE_DIR}/adapter/v2/call_data_manager/src/send_code_call_data_manager.cc"
+        "${CMAKE_CURRENT_SOURCE_DIR}/adapter/v2/call_data/src/send_code_call_data.cc"
+)
+
+set(SERVICE_FILES
+        "${CMAKE_CURRENT_SOURCE_DIR}/service/src/auth_service.cc"
+        "${CMAKE_CURRENT_SOURCE_DIR}/service/src/basic_user_service.cc"
+)
+
+set(DOMAIN_FILES
+        "${CMAKE_CURRENT_SOURCE_DIR}/domain/user.cc"
+)
+
+set(INFRASTRUCTURE_FILES
+        # domain_implement
+        "${CMAKE_CURRENT_SOURCE_DIR}/infrastructure/domain_implement/src/verification_code_repository.cc"
+        "${CMAKE_CURRENT_SOURCE_DIR}/infrastructure/domain_implement/src/user_repository.cc"
+        # persistence
+        "${CMAKE_CURRENT_SOURCE_DIR}/infrastructure/persistence/postgresql/src/pq_connection.cc"
+        "${CMAKE_CURRENT_SOURCE_DIR}/infrastructure/persistence/postgresql/src/async_connection_pool.cc"
+        "${CMAKE_CURRENT_SOURCE_DIR}/infrastructure/persistence/dao/user_dao.cc"
+        # state_storage
+        "${CMAKE_CURRENT_SOURCE_DIR}/infrastructure/state_storage/redis_dao/redis_client.cc"
+        # asio_thread_pool
+        "${CMAKE_CURRENT_SOURCE_DIR}/infrastructure/asio_thread_pool/asio_thread_pool.cc"
+)
+
+set(UTILS_FILES
+        "${CMAKE_CURRENT_SOURCE_DIR}/utils/src/verification_code_generator.cc"
+)
+
+set(CONFIG_FILES
+        "${CMAKE_CURRENT_SOURCE_DIR}/config/app_config.cc"
+)
+
+set(BUILTIN_FILES
+        "${CMAKE_CURRENT_SOURCE_DIR}/builtin_impl/builtin_impl.cc"
+)
+
+# 添加主程序可执行文件
+add_executable(UserServiceServer
+        main.cc
+        ${SERVER_FILES}
+        ${ADAPTER_FILES}
+        ${SERVICE_FILES}
+        ${DOMAIN_FILES}
+        ${INFRASTRUCTURE_FILES}
+        ${UTILS_FILES}
+        ${CONFIG_FILES}
+        ${BUILTIN_FILES}
+)
+
+# 添加预编译头文件 PCH
+target_precompile_headers(UserServiceServer PRIVATE
+        # --- 标准库 ---
+        <memory>
+        <string>
+        <vector>
+        <future>
+
+        # --- 巨型第三方库 (加速编译) ---
+        <boost/di.hpp>
+        <boost/asio.hpp>
+        <spdlog/spdlog.h>
+        <grpcpp/grpcpp.h>
+        <jwt-cpp/jwt.h>
+        <stduuid/uuid.h>
+        <boost/redis.hpp>
+)
+
+# 添加头文件包含目录
+target_include_directories(UserServiceServer PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+# 链接相关库
+target_link_libraries(UserServiceServer PUBLIC
+        my_proto_lib        # 链接自己生成的 proto 代码库
+        gRPC::grpc++
+        OpenSSL::SSL
+        OpenSSL::Crypto
+        PostgreSQL::PostgreSQL
+        cryptopp::cryptopp
+        jwt-cpp::jwt-cpp
+        spdlog::spdlog
+        stduuid
+        yaml-cpp::yaml-cpp
+)
+
+file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/config/config.yaml
+        DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/config)
+```
+
+='='=' File: ./UserService/server/user_service_server.cc '='='='
+```
+// Copyright (c) 2025 seaStarLxy.
+// Licensed under the MIT License.
+
+#include "user_service_server.h"
+#include <boost/asio/io_context.hpp>
+#include <spdlog/spdlog.h>
+
+#include "adapter/v2/call_data_manager/include/register_call_data_manager.h"
+#include "adapter/v2/call_data/include/register_call_data.h"
+#include "adapter/v2/call_data_manager/include/send_code_call_data_manager.h"
+#include "adapter/v2/call_data/include/send_code_call_data.h"
+
+// #include "adapter/v2/call_data/interface/call_data.hpp"
+
+using namespace user_service::server;
+using namespace user_service::adapter::v2;
+
+UserServiceServer::UserServiceServer(const std::shared_ptr<service::IAuthService> &auth_service,
+                                     const std::shared_ptr<service::IBasicUserService> &basic_service,
+                                     const std::shared_ptr<boost::asio::io_context> &ioc) : ioc_(ioc),
+    auth_business_service_(auth_service), basic_user_business_service_(basic_service) {
+}
+
+UserServiceServer::~UserServiceServer() = default;
+
+void UserServiceServer::Run() {
+    // 启动 gRPC 服务器
+    std::string ipv4_address("0.0.0.0:50051");
+    // std::string ipv6_address("[::]:50051");
+    grpc::ServerBuilder builder;
+    builder.AddListeningPort(ipv4_address, grpc::InsecureServerCredentials());
+    // builder.AddListeningPort(ipv6_address, grpc::InsecureServerCredentials());
+    builder.RegisterService(&auth_grpc_service_);
+    builder.RegisterService(&basic_user_grpc_service_);
+    cq_ = builder.AddCompletionQueue();
+    server_ = builder.BuildAndStart();
+    SPDLOG_DEBUG("Server listening on {}", ipv4_address);
+
+    // 原始播种法
+    // (new RegisterCallData(&service_, cq_.get(), *ioc_, basic_service_))->Init();
+    SPDLOG_DEBUG("Seeded RegisterCallData.");
+    RegisterCallDataManager register_manager = RegisterCallDataManager(100, &basic_user_grpc_service_, basic_user_business_service_.get(), ioc_, cq_.get());
+    register_manager.Start();
+    SendCodeCallDataManager send_code_manager = SendCodeCallDataManager(100, &auth_grpc_service_, auth_business_service_.get(), ioc_, cq_.get());
+    send_code_manager.Start();
+
+
+    // 启动 Worker 线程池
+    unsigned num_workers = std::thread::hardware_concurrency();
+    SPDLOG_DEBUG("Starting {} worker threads...", num_workers);
+    worker_threads_.reserve(num_workers);
+    for (int i = 0; i < num_workers; ++i) {
+        worker_threads_.emplace_back(&UserServiceServer::HandleRpc, this);
+    }
+    SPDLOG_DEBUG("Worker threads startup finished");
+
+    // 阻塞主线程
+    server_->Wait();
+}
+
+void UserServiceServer::Shutdown() {
+    server_->Shutdown();
+    cq_->Shutdown();
+    for (auto &t: worker_threads_) {
+        t.join();
+    }
+}
+
+void UserServiceServer::HandleRpc() const {
+    void *tag; // tag 实际上是 ICallData*
+    bool ok;
+
+    // 循环：阻塞地从 CQ 中取事件
+    while (cq_->Next(&tag, &ok)) {
+        if (!ok) {
+            // CQ 正在关闭
+            break;
+        }
+        SPDLOG_DEBUG("Get one request");
+        static_cast<ICallData*>(tag)->Proceed();
+    }
+}
+
+```
+
+='='=' File: ./UserService/server/application.cc '='='='
+```
+// Copyright (c) 2025 seaStarLxy.
+// Licensed under the MIT License.
+
+#include "server/application.h"
+#include <spdlog/spdlog.h>
+#include <boost/di.hpp>
+#include <utility>
+#include "server/user_service_server.h"
+
+#include "service/include/auth_service.h"
+#include "service/include/basic_user_service.h"
+
+#include "infrastructure/asio_thread_pool/asio_thread_pool.h"
+#include "infrastructure/state_storage/redis_dao/redis_client.h"
+#include "infrastructure/persistence/postgresql/include/async_connection_pool.h"
+#include "infrastructure/persistence/dao/user_dao.h"
+#include "infrastructure/domain_implement/include/verification_code_repository.h"
+#include "infrastructure/domain_implement/include/user_repository.h"
+
+#include "utils/include/verification_code_generator.h"
+
+#include "config/app_config.h"
+
+using namespace user_service::infrastructure;
+using namespace user_service::service;
+using namespace user_service::server;
+using namespace user_service::util;
+using namespace user_service::domain;
+using namespace user_service::config;
+
+namespace di = boost::di;
+
+Application::Application(std::string&& config_filepath): config_path_(std::move(config_filepath)),
+    ioc_(std::make_shared<boost::asio::io_context>()) {
+
+    SPDLOG_INFO("Application constructing...");
+
+    // 加载配置
+    const auto app_config = AppConfig(config_path_);
+    const auto redis_config = app_config.GetRedisConfig();
+    const auto db_pool_config = app_config.GetDBPoolConfig();
+
+    /*
+     * bind<T> 要什么，传入T，可以自动解析构造函数中的 T T* T智能指针等等
+     * to<U> 给什么，传入的U至少可以隐式转换成T。省略to则代表直接构造T类型
+     * in 怎么给
+     */
+    // 注意这里的di内部会对类型解析，所以无法使用前向声明，必须使用include头文件（现在在源文件其实不用管）
+    // 构造依赖注入器
+    /* ps: ioc一定要传入const指针，否则di内部会创建其他实例 */
+    const auto injector = di::make_injector(
+        di::bind<boost::asio::io_context>().to(ioc_),
+        di::bind<DbPoolConfig>().to(db_pool_config),
+        di::bind<AsyncConnectionPool>().in(di::singleton),
+        di::bind<UserDao>().in(di::singleton),
+        di::bind<RedisConfig>().to(redis_config),
+        di::bind<RedisClient>().in(di::singleton),
+        di::bind<IVerificationCodeGenerator>().to<CodeGenerator>().in(di::singleton),
+        di::bind<IVerificationCodeRepository>().to<VerificationCodeRepository>().in(di::singleton),
+        di::bind<IUserRepository>().to<UserRepository>().in(di::singleton),
+        di::bind<IAuthService>().to<AuthService>().in(di::singleton),
+        di::bind<IBasicUserService>().to<BasicUserService>().in(di::singleton)
+    );
+    // 获取核心资源（后面需要初始化）
+    redis_client_ = injector.create<std::shared_ptr<RedisClient>>();
+    db_pool_ = injector.create<std::shared_ptr<AsyncConnectionPool>>();
+    // 创建 Server 和 ThreadPool
+    thread_pool_ = injector.create<std::unique_ptr<AsioThreadPool>>();
+    server_ = injector.create<std::unique_ptr<UserServiceServer>>();
+    SPDLOG_INFO("Application constructed.");
+}
+
+Application::~Application() = default;
+
+void Application::Run() const {
+    try {
+        // 启动线程池
+        SPDLOG_INFO("Application: Starting Thread Pool...");
+        SPDLOG_INFO("DEBUG CHECK: Application ioc address: {}", fmt::ptr(ioc_.get()));
+        thread_pool_->Run();
+
+        SPDLOG_INFO("Application: Waiting for infrastructure init...");
+        // 同步等待，初始化完成后才能开始监听
+        std::future<void> init_future = boost::asio::co_spawn(*ioc_, [this]() -> boost::asio::awaitable<void> {
+            try {
+                // Redis 初始化
+                co_await redis_client_->Init();
+                SPDLOG_INFO("Redis connected.");
+                // 数据库连接池 初始化
+                co_await db_pool_->Init();
+                SPDLOG_INFO("Database connected.");
+            } catch (const std::exception& e) {
+                SPDLOG_CRITICAL("Infrastructure init failed: {}", e.what());
+                throw;
+            }
+        }, boost::asio::use_future);
+        init_future.get();
+
+        // 启动 Server
+        SPDLOG_INFO("Application: Starting gRPC Server...");
+        server_->Run();
+    } catch (const std::exception& e) {
+        SPDLOG_CRITICAL("Application runtime error: {}", e.what());
+        throw;
+    }
+}
+```
+
+='='=' File: ./UserService/server/user_service_server.h '='='='
+```
+// Copyright (c) 2025 seaStarLxy.
+// Licensed under the MIT License.
+
+#pragma once
+
+#include <UserService/v1/user_service.grpc.pb.h>
+#include "service/interface/i_basic_user_service.h"
+#include "service/interface/i_auth_service.h"
+#include <thread>
+#include <grpcpp/grpcpp.h>
+#include <boost/asio/io_context.hpp>
+
+namespace user_service::server
+{
+    class UserServiceServer
+    {
+    public:
+        UserServiceServer(const std::shared_ptr<service::IAuthService>& auth_service,
+            const std::shared_ptr<service::IBasicUserService>& basic_service,
+            const std::shared_ptr<boost::asio::io_context>& ioc);
+        ~UserServiceServer();
+        void Run();
+        void Shutdown();
+    private:
+        void HandleRpc() const;
+        std::unique_ptr<grpc::ServerCompletionQueue> cq_;
+        proto::v1::AuthService::AsyncService auth_grpc_service_;
+        proto::v1::UserService::AsyncService basic_user_grpc_service_;
+        std::unique_ptr<grpc::Server> server_;
+        std::vector<std::thread> worker_threads_;
+
+        const std::shared_ptr<boost::asio::io_context> ioc_;
+        std::shared_ptr<service::IAuthService> auth_business_service_;
+        std::shared_ptr<service::IBasicUserService> basic_user_business_service_;
+    };
+}
+```
+
+='='=' File: ./UserService/server/application.h '='='='
+```
+// Copyright (c) 2025 seaStarLxy.
+// Licensed under the MIT License.
+
+#pragma once
+#include <string>
+#include <memory>
+#include <boost/asio.hpp>
+
+namespace user_service::infrastructure {
+    class AsioThreadPool;
+    class RedisClient;
+    class AsyncConnectionPool;
+}
+
+namespace user_service::server {
+    class UserServiceServer;
+    class Application {
+    public:
+        explicit Application(std::string&& config_filepath);
+        ~Application();
+
+        // 不允许拷贝复制
+        Application(const Application&) = delete;
+        Application& operator=(const Application&) = delete;
+
+        // 运行整个程序
+        void Run() const;
+
+    private:
+        std::string config_path_;
+        const std::shared_ptr<boost::asio::io_context> ioc_;
+        std::shared_ptr<infrastructure::RedisClient> redis_client_;
+        std::shared_ptr<infrastructure::AsyncConnectionPool> db_pool_;
+        std::unique_ptr<infrastructure::AsioThreadPool> thread_pool_;
+        std::unique_ptr<UserServiceServer> server_;
+    };
+}
+```
+
+='='=' File: ./UserService/adapter/v1/interface/i_call_data.h '='='='
+```
+// Copyright (c) 2025 seaStarLxy.
+// Licensed under the MIT License.
+
+#pragma once
+
+namespace user_service {
+    class ICallData {
+    public:
+        virtual ~ICallData() = default;
+        virtual void Proceed() = 0;
+    };
+}
+```
+
+='='=' File: ./UserService/adapter/v1/src/register_call_data.cc '='='='
+```
+// Copyright (c) 2025 seaStarLxy.
+// Licensed under the MIT License.
+
+
+#include "../include/register_call_data.h"
+#include <string>
+#include <boost/asio/io_context.hpp>
+#include <spdlog/spdlog.h>
+
+using namespace user_service::adapter;
+
+RegisterCallData::RegisterCallData(v1::UserService::AsyncService *service, grpc::ServerCompletionQueue *cq,
+                                   boost::asio::io_context &ioc, const std::shared_ptr<service::IBasicUserService>& basic_user_service)
+    : service_(service), cq_(cq), responder_(&ctx_), status_(State::CREATE), ioc_(ioc), basic_user_service_(basic_user_service) {
+}
+
+void RegisterCallData::Init() {
+    Proceed();
+}
+
+void RegisterCallData::Proceed() {
+    switch (status_) {
+        case State::CREATE:
+            HandleCreate();
+            break;
+        case State::PROCESS:
+            HandleProcess();
+            break;
+        case State::FINISH:
+            HandleFinish();
+            break;
+    }
+}
+
+void RegisterCallData::HandleCreate() {
+    status_ = State::PROCESS;
+    service_->RequestRegister(&ctx_, &request_, &responder_, cq_, cq_, this);
+}
+
+void RegisterCallData::HandleProcess() {
+    (new RegisterCallData(service_, cq_, ioc_, basic_user_service_))->Init();
+    /*
+     * 2个陷阱：
+     *  1.状态改变不能由asio线程执行，必须是工作线程
+     *      指令重排列会打乱顺序，他只保证单线程内结果正确，由于改变status和触发放回cq单线程内不相干，所以可能指令重排列
+     *  2.状态改变需要放在启动协程前
+     *      要保证asio线程触发放回cq发生前，status的状态被改为finish
+     */
+    status_ = State::FINISH;
+    SPDLOG_DEBUG("start register coroutine");
+    boost::asio::co_spawn(ioc_,
+        [this] { return RunLogic(); },
+        [this](std::exception_ptr e) { OnLogicFinished(e); }
+    );
+}
+
+void RegisterCallData::HandleFinish() {
+    delete this;
+}
+
+boost::asio::awaitable<void> RegisterCallData::RunLogic() {
+    SPDLOG_DEBUG("run RunLogic");
+    std::string prefix("Hello, ");
+    reply_.set_user_id(prefix + request_.username());
+    co_return;
+}
+
+void RegisterCallData::OnLogicFinished(std::exception_ptr e) {
+    SPDLOG_DEBUG("run OnLogicFinished");
+    grpc::Status status;
+
+    if (e) {
+        std::string error_message = "Internal server error";
+        try {
+            std::rethrow_exception(e);
+        } catch (const std::exception &ex) {
+            error_message = ex.what();
+            SPDLOG_ERROR("Coroutine finished with error: {}", error_message);
+        } catch (...) {
+            error_message = "Unknown exception type";
+            SPDLOG_ERROR("Coroutine finished with non-standard exception.");
+        }
+        status = grpc::Status(grpc::StatusCode::INTERNAL, error_message);
+    } else {
+        // 协程成功完成
+        SPDLOG_DEBUG("Coroutine finished successfully for user: {}", request_.username());
+        status = grpc::Status::OK;
+    }
+
+    // 调用 Finish
+    responder_.Finish(reply_, status, this);
+}
+
+```
+
+='='=' File: ./UserService/adapter/v1/include/register_call_data.h '='='='
+```
+// Copyright (c) 2025 seaStarLxy.
+// Licensed under the MIT License.
+
+#pragma once
+
+
+#include "../interface/i_call_data.h"
+#include <UserService/v1/user_service.grpc.pb.h>
+#include "service/interface/i_basic_user_service.h"
+#include <boost/asio/co_spawn.hpp>
+#include <grpcpp/completion_queue.h>
+#include <grpcpp/server_context.h>
+#include <grpcpp/support/async_unary_call.h>
+
+
+namespace user_service::adapter {
+    class RegisterCallData: public ICallData {
+    public:
+        RegisterCallData(v1::UserService::AsyncService* service, grpc::ServerCompletionQueue* cq,
+            boost::asio::io_context& ioc, const std::shared_ptr<service::IBasicUserService>& basic_user_service);
+
+        void Init();
+
+        void Proceed() override;
+
+    private:
+        void HandleCreate();
+
+        void HandleProcess();
+
+        void HandleFinish();
+
+        boost::asio::awaitable<void> RunLogic();
+
+        void OnLogicFinished(std::exception_ptr e);
+
+        // grpc 所需变量
+        v1::UserService::AsyncService* service_;
+        grpc::ServerCompletionQueue* cq_;
+        grpc::ServerContext ctx_;
+        grpc::ServerAsyncResponseWriter<v1::RegisterResponse> responder_;
+
+        v1::RegisterRequest request_;
+        v1::RegisterResponse reply_;
+
+        enum class State { CREATE, PROCESS, FINISH };
+        State status_;
+
+
+        // 协程所需变量
+        boost::asio::io_context& ioc_;
+
+        std::shared_ptr<service::IBasicUserService> basic_user_service_;
+
+
+    };
+}
+```
+
+='='=' File: ./UserService/adapter/v2/call_data/interface/call_data.hpp '='='='
+```
+// Copyright (c) 2025 seaStarLxy.
+// Licensed under the MIT License.
+
+#pragma once
+#include "adapter/v2/call_data/interface/i_call_data.h"
+#include "adapter/v2/call_data_manager/interface/call_data_manager.hpp"
+#include <boost/asio/co_spawn.hpp>
+#include <spdlog/spdlog.h>
+#include <grpcpp/grpcpp.h>
+
+namespace user_service::adapter::v2 {
+
+    template<typename T>
+    concept HasRunSpecificLogic = requires(T& derived) {
+        // 传入 T& 是因为如果传入T，T是必须可移动可复制的，但T& 没有这个要求
+        /*
+         * requires 语句检查：
+         * 1. 是否存在一个名为 RunSpecificLogic 的成员函数
+         * 2. 它被调用时，返回的类型是否与 boost::asio::awaitable<void> 相同
+         */
+        { derived.RunSpecificLogic() } -> std::same_as<boost::asio::awaitable<void>>;
+    };
+
+    /*
+     * 特定类型的 CallData 的公共部分，即：让编译器替我生成每个接口对应的CallData。
+     * 但是每个CallData都有不一样的地方，不一样的地方再继承一个子类重写
+     */
+    template<typename RequestType, typename ResponseType, typename ManagerType, typename SpecificCallDataType>
+    class CallData : public ICallData {
+    public:
+        explicit CallData(ManagerType* manager) : status_(State::WAIT_PROCESSING), manager_(manager), responder_(&ctx_) {
+            static_assert(std::is_base_of_v<ICallDataManager, ManagerType>, "ManagerType must derive from ICallDataManager");
+        }
+
+        ~CallData() override = default;
+
+        void Proceed() override {
+            switch (status_) {
+                case State::WAIT_PROCESSING:
+                    HandleProcess();
+                    break;
+                case State::FINISHED:
+                    HandleFinish();
+                    break;
+            }
+        }
+
+        void HandleProcess() {
+            /*
+             * 2个陷阱：
+             *  1.状态改变不能由 asio线程 执行，必须是工作线程
+             *      指令重排列会打乱顺序，他只保证单线程内结果正确，由于改变 status 和 触发放回CQ 单线程内不相干，所以可能指令重排列
+             *  2.状态改变需要放在启动协程前
+             *      要保证 asio线程 触发放回 CQ 发生前，status 的状态被改为 finish
+             */
+            // 这里的status_更新实际上是一个预处理，为了线程安全，必须要先改状态再进行业务逻辑
+            status_ = State::FINISHED;
+            SPDLOG_DEBUG("start register coroutine");
+
+            boost::asio::co_spawn(manager_->GetIOContext(),
+                                  [this] { return RunLogic(); },
+                                  [this](std::exception_ptr e) { OnLogicFinished(e); }
+            );
+        }
+
+        void HandleFinish() {
+            // 只有处于 WAIT_PROCESSING 状态的 CallData，proceed驱动的时候switch才会跳转执行业务逻辑
+            status_ = State::WAIT_PROCESSING;
+            Reset();
+            // 通过管理器，把自己重新注册给 CQ
+            manager_->RegisterCallDataToCQ(static_cast<SpecificCallDataType*>(this));
+        }
+
+        void Reset() {
+            // ctx不支持复制运算符，只能出此下策
+            ctx_.~ServerContext();
+            new(&ctx_) grpc::ServerContext();
+            // 绑定的不变的成员地址 &ctx_（这里只是为了获取新的responder）
+            responder_ = grpc::ServerAsyncResponseWriter<ResponseType>(&ctx_);
+            // 重置回复，防止数据泄露
+            reply_ = ResponseType();
+            // 重置请求，释放内存
+            request_ = RequestType();
+        }
+
+        boost::asio::awaitable<void> RunLogic() requires HasRunSpecificLogic<SpecificCallDataType> {
+            auto* derived_this = static_cast<SpecificCallDataType*>(this);
+            co_await derived_this->RunSpecificLogic();
+        }
+        // 具体的业务逻辑需要子类重写
+        // virtual boost::asio::awaitable<void> RunLogic() = 0;
+
+        // 业务逻辑完成，注册回 CQ
+        void OnLogicFinished(std::exception_ptr e) {
+            grpc::Status status;
+            if (e) {
+                std::string error_message = "Internal server error";
+                try {
+                    std::rethrow_exception(e);
+                } catch (const std::exception &ex) {
+                    error_message = ex.what();
+                    SPDLOG_ERROR("Coroutine finished with error: {}", error_message);
+                } catch (...) {
+                    error_message = "Unknown exception type";
+                    SPDLOG_ERROR("Coroutine finished with non-standard exception.");
+                }
+                status = grpc::Status(grpc::StatusCode::INTERNAL, error_message);
+            } else {
+                // 协程成功完成
+                SPDLOG_DEBUG("Coroutine finished successfully");
+                status = grpc::Status::OK;
+            }
+            // 调用 Finish 就是把自己放回 CQ
+            responder_.Finish(reply_, status, this);
+        }
+    private:
+        // 仅内部使用，call data manager 友元可访问，但不该访问
+        enum class State { WAIT_PROCESSING, FINISHED };
+        State status_;
+
+    // 供 call data 子类使用，此处需要设置为 protected
+    protected:
+        // 提供成员变量的私有方法供对应 manager(友元) 调用
+        RequestType* GetRequestAddress() {
+            return &request_;
+        }
+        grpc::ServerContext* GetContextAddress() {
+            return &ctx_;
+        }
+        grpc::ServerAsyncResponseWriter<ResponseType>* GetResponderAddress() {
+            return &responder_;
+        }
+        ManagerType* manager_;
+        RequestType request_;
+        ResponseType reply_;
+        grpc::ServerContext ctx_;
+        grpc::ServerAsyncResponseWriter<ResponseType> responder_;
+    };
+}
+
+```
+
+='='=' File: ./UserService/adapter/v2/call_data/interface/i_call_data.h '='='='
+```
+// Copyright (c) 2025 seaStarLxy.
+// Licensed under the MIT License.
+
+#pragma once
+#include <boost/asio/co_spawn.hpp>
+#include <spdlog/spdlog.h>
+#include <grpcpp/grpcpp.h>
+
+#include "adapter/v2/call_data_manager/interface/call_data_manager.hpp"
+
+namespace user_service::adapter::v2 {
+    class ICallData {
+    public:
+        explicit ICallData() {}
+        virtual ~ICallData() = default;
+
+        // HandleRpc 中 CQ 给出返回 calldata 时调用，用于驱动 calldata
+        virtual void Proceed() = 0;
+    };
+
+
+}
+
+```
+
+='='=' File: ./UserService/adapter/v2/call_data/src/register_call_data.cc '='='='
+```
+// Copyright (c) 2025 seaStarLxy.
+// Licensed under the MIT License.
+
+#include "adapter/v2/call_data/include/register_call_data.h"
+#include "adapter/v2/call_data_manager/include/register_call_data_manager.h"
+#include "service/interface/i_basic_user_service.h"
+
+using namespace user_service::adapter::v2;
+
+
+RegisterCallData::RegisterCallData(RegisterCallDataManager* manager): CallData(manager) {
+
+}
+
+RegisterCallData::~RegisterCallData() = default;
+
+boost::asio::awaitable<void> RegisterCallData::RunSpecificLogic() {
+    SPDLOG_DEBUG("run RunLogic");
+    auto* basic_user_service = manager_->GetBusinessService();
+    const service::RegisterRequest register_request(request_.username(), request_.password(),
+        request_.phone_number(), request_.code());
+    SPDLOG_DEBUG("ready to enter coroutine");
+    service::RegisterResponse register_response = co_await basic_user_service->Register(register_request);
+    SPDLOG_DEBUG("leave from coroutine");
+    proto::v1::CommonStatus* status = reply_.mutable_status();
+    status->set_code(static_cast<std::int32_t>(register_response.status.code));
+    status->set_message(register_response.status.message);
+    reply_.set_user_id(register_response.user_id);
+    co_return;
+}
+
+```
+
+='='=' File: ./UserService/adapter/v2/call_data/src/send_code_call_data.cc '='='='
+```
+// Copyright (c) 2025 seaStarLxy.
+// Licensed under the MIT License.
+
+#include "adapter/v2/call_data/include/send_code_call_data.h"
+#include "adapter/v2/call_data_manager/include/send_code_call_data_manager.h"
+#include "service/interface/i_auth_service.h"
+#include "service/model/common_model.h"
+
+using namespace user_service::adapter::v2;
+
+
+SendCodeCallData::SendCodeCallData(SendCodeCallDataManager* manager): CallData(manager) {
+
+}
+
+SendCodeCallData::~SendCodeCallData() = default;
+
+boost::asio::awaitable<void> SendCodeCallData::RunSpecificLogic() {
+    SPDLOG_DEBUG("run RunLogic");
+    auto* auth_service = manager_->GetBusinessService();
+    const service::SendCodeRequest send_code_request(request_.phone_number(), static_cast<service::CodeUsage>(request_.usage()));
+    SPDLOG_DEBUG("ready to enter coroutine");
+    service::SendCodeResponse send_code_response = co_await auth_service->SendCode(send_code_request);
+    SPDLOG_DEBUG("leave from coroutine");
+    proto::v1::CommonStatus* status = reply_.mutable_status();
+    status->set_code(static_cast<std::int32_t>(send_code_response.status.code));
+    status->set_message(send_code_response.status.message);
+    co_return;
+}
+
+```
+
+='='=' File: ./UserService/adapter/v2/call_data/include/register_call_data.h '='='='
+```
+// Copyright (c) 2025 seaStarLxy.
+// Licensed under the MIT License.
+
+#pragma once
+#include "adapter/v2/call_data/interface/call_data.hpp"
+#include <UserService/v1/user_service.grpc.pb.h>
+
+namespace user_service::adapter::v2 {
+    class RegisterCallDataManager;
+    class RegisterCallData final: public CallData<proto::v1::RegisterRequest, proto::v1::RegisterResponse, RegisterCallDataManager, RegisterCallData> {
+        friend RegisterCallDataManager;
+    public:
+        explicit RegisterCallData(RegisterCallDataManager* manager);
+        ~RegisterCallData() override;
+        boost::asio::awaitable<void> RunSpecificLogic();
+    };
+}
+
+```
+
+='='=' File: ./UserService/adapter/v2/call_data/include/send_code_call_data.h '='='='
+```
+// Copyright (c) 2025 seaStarLxy.
+// Licensed under the MIT License.
+
+#pragma once
+#include "adapter/v2/call_data/interface/call_data.hpp"
+#include <UserService/v1/user_service.grpc.pb.h>
+
+namespace user_service::adapter::v2 {
+    class SendCodeCallDataManager;
+    class SendCodeCallData final: public CallData<proto::v1::SendCodeRequest, proto::v1::SendCodeResponse, SendCodeCallDataManager, SendCodeCallData> {
+        friend SendCodeCallDataManager;
+    public:
+        explicit SendCodeCallData(SendCodeCallDataManager* manager);
+        ~SendCodeCallData() override;
+        boost::asio::awaitable<void> RunSpecificLogic();
+    };
+}
+```
+
+='='=' File: ./UserService/adapter/v2/call_data_manager/interface/i_call_data_manager.h '='='='
+```
+// Copyright (c) 2025 seaStarLxy.
+// Licensed under the MIT License.
+
+#pragma once
+#include <memory>
+#include <UserService/v1/user_service.grpc.pb.h>
+#include <grpcpp/completion_queue.h>
+#include <boost/asio/io_context.hpp>
+
+namespace user_service::adapter::v2 {
+    // ICallData 定义文件包含了该文件，这里使用前向声明更多是为了防止嵌套包含
+    class ICallData;
+    // 提供 manager 统一接口
+    class ICallDataManager {
+    public:
+        ICallDataManager(const size_t initiate_size, const std::shared_ptr<boost::asio::io_context>& ioc, grpc::ServerCompletionQueue * cq):
+            initial_size_(initiate_size), ioc_(ioc), cq_(cq) {
+            if (!cq_) {
+                throw std::invalid_argument("CQ cannot be null.");
+            }
+        }
+        virtual ~ICallDataManager() = default;
+        // 调用了这个函数就一定要用他的结果（编译期保证）
+        [[nodiscard]] boost::asio::io_context& GetIOContext() const {
+            return *ioc_;
+        }
+    protected:
+        size_t initial_size_;
+        std::shared_ptr<boost::asio::io_context> ioc_;
+        grpc::ServerCompletionQueue *cq_;
+    };
+
+}
+
+```
+
+='='=' File: ./UserService/adapter/v2/call_data_manager/interface/call_data_manager.hpp '='='='
+```
+// Copyright (c) 2025 seaStarLxy.
+// Licensed under the MIT License.
+
+#pragma once
+#include "adapter/v2/call_data_manager/interface/i_call_data_manager.h"
+#include <UserService/v1/user_service.grpc.pb.h>
+#include <type_traits> // for std::is_base_of
+#include <vector>
+#include <memory>
+#include <grpcpp/completion_queue.h>
+#include <boost/asio/io_context.hpp>
+
+
+namespace user_service::adapter::v2 {
+
+    template<typename T, typename SpecificCallDataType>
+    concept HasSpecificRegisterCallDataToCQ = requires(T& derived) {
+        /*
+         * 1. std::declval 表示假设传入一个值
+         * 2. 返回必须是 std::same_as 代表不能是强转出来的 void
+         */
+        { derived.SpecificRegisterCallDataToCQ(std::declval<SpecificCallDataType*>()) } -> std::same_as<void>;
+    };
+
+    // 每种特定类型的 CallData 对应一个 Manager
+    template<typename GrpcServiceType, typename CallDataType, typename BusinessServiceType, typename SpecificCallDataManagerType>
+    class CallDataManager: public ICallDataManager {
+    public:
+        CallDataManager(const size_t initial_size, GrpcServiceType* grpc_service, BusinessServiceType* business_service,
+            const std::shared_ptr<boost::asio::io_context>& ioc, grpc::ServerCompletionQueue *cq):
+            ICallDataManager(initial_size, ioc, cq), grpc_service_(grpc_service), business_service_(business_service) {
+            static_assert(std::is_base_of_v<ICallData, CallDataType>, "CallDataType must derive from ICallData");
+
+            if (!grpc_service_) {
+                throw std::invalid_argument("Service and CQ cannot be null.");
+            }
+        }
+
+        ~CallDataManager() override = default;
+
+        void Start() {
+            // 初始化 call data
+            for (size_t i = 0; i < initial_size_; ++i) {
+                auto derived_this = static_cast<SpecificCallDataManagerType*>(this);
+                auto call_data = std::make_unique<CallDataType>(derived_this);
+                RegisterCallDataToCQ(call_data.get());
+                pool_.push_back(std::move(call_data));
+            }
+        }
+
+        void RegisterCallDataToCQ(CallDataType* call_data) requires HasSpecificRegisterCallDataToCQ<SpecificCallDataManagerType, CallDataType> {
+            // 利用 CRTP 实现静态多态 （需要保证子类有 SpecificRegisterCallDataToCQ 方法）
+            auto specific_call_data_manager = static_cast<SpecificCallDataManagerType*>(this);
+            specific_call_data_manager->SpecificRegisterCallDataToCQ(call_data);
+        }
+        // 此处为利用动态多态实现，为提高性能，采用上面的静态多态
+        // virtual void SpecificRegisterCallDataToCQ(CallDataType* call_data) = 0;
+
+        BusinessServiceType* GetBusinessService() {
+            return business_service_;
+        }
+    protected:
+        GrpcServiceType * grpc_service_;
+        BusinessServiceType * business_service_;
+        std::vector<std::unique_ptr<CallDataType>> pool_;
+    };
+}
+
+```
+
+='='=' File: ./UserService/adapter/v2/call_data_manager/src/send_code_call_data_manager.cc '='='='
+```
+// Copyright (c) 2025 seaStarLxy.
+// Licensed under the MIT License.
+
+#include "adapter/v2/call_data_manager/include/send_code_call_data_manager.h"
+#include "adapter/v2/call_data/include/send_code_call_data.h"
+
+using namespace user_service::adapter::v2;
+
+SendCodeCallDataManager::SendCodeCallDataManager(const size_t initial_size, proto::v1::AuthService::AsyncService* grpc_service,
+            service::IAuthService* business_service, const std::shared_ptr<boost::asio::io_context>& ioc,
+            grpc::ServerCompletionQueue *cq): CallDataManager(initial_size, grpc_service, business_service, ioc, cq) {}
+
+SendCodeCallDataManager::~SendCodeCallDataManager() = default;
+
+void SendCodeCallDataManager::SpecificRegisterCallDataToCQ(SendCodeCallData* call_data) const {
+    grpc_service_->RequestSendCode(call_data->GetContextAddress(), call_data->GetRequestAddress(), call_data->GetResponderAddress(), cq_, cq_, call_data);
+}
+```
+
+='='=' File: ./UserService/adapter/v2/call_data_manager/src/register_call_data_manager.cc '='='='
+```
+// Copyright (c) 2025 seaStarLxy.
+// Licensed under the MIT License.
+
+#include "adapter/v2/call_data_manager/include/register_call_data_manager.h"
+#include "adapter/v2/call_data/include/register_call_data.h"
+
+using namespace user_service::adapter::v2;
+
+RegisterCallDataManager::RegisterCallDataManager(const size_t initial_size, proto::v1::UserService::AsyncService* grpc_service,
+            service::IBasicUserService* business_service, const std::shared_ptr<boost::asio::io_context>& ioc,
+            grpc::ServerCompletionQueue *cq): CallDataManager(initial_size, grpc_service, business_service, ioc, cq) {
+    SPDLOG_INFO("DEBUG CHECK: RegisterCallDataManager ioc address: {}", fmt::ptr(ioc_.get()));
+}
+
+RegisterCallDataManager::~RegisterCallDataManager() = default;
+
+void RegisterCallDataManager::SpecificRegisterCallDataToCQ(RegisterCallData* call_data) const {
+
+    // grpc_service_->RequestRegister(&call_data->ctx_, &call_data->request_, &call_data->responder_, cq_, cq_, call_data);
+    grpc_service_->RequestRegister(call_data->GetContextAddress(), call_data->GetRequestAddress(), call_data->GetResponderAddress(), cq_, cq_, call_data);
+
+}
+```
+
+='='=' File: ./UserService/adapter/v2/call_data_manager/include/send_code_call_data_manager.h '='='='
+```
+// Copyright (c) 2025 seaStarLxy.
+// Licensed under the MIT License.
+
+#pragma once
+#include "adapter/v2/call_data_manager/interface/call_data_manager.hpp"
+#include "service/interface/i_auth_service.h"
+
+namespace user_service::adapter::v2 {
+    class SendCodeCallData;
+    class SendCodeCallDataManager final: public CallDataManager<proto::v1::AuthService::AsyncService, SendCodeCallData, service::IAuthService, SendCodeCallDataManager> {
+        friend SendCodeCallData;
+    public:
+        SendCodeCallDataManager(size_t initial_size, proto::v1::AuthService::AsyncService* grpc_service,
+            service::IAuthService* business_service, const std::shared_ptr<boost::asio::io_context>& ioc,
+            grpc::ServerCompletionQueue *cq);
+
+        ~SendCodeCallDataManager() override;
+
+        void SpecificRegisterCallDataToCQ(SendCodeCallData* call_data) const;
+    };
+}
+```
+
+='='=' File: ./UserService/adapter/v2/call_data_manager/include/register_call_data_manager.h '='='='
+```
+// Copyright (c) 2025 seaStarLxy.
+// Licensed under the MIT License.
+
+#pragma once
+#include "adapter/v2/call_data_manager/interface/call_data_manager.hpp"
+#include "service/interface/i_basic_user_service.h"
+
+namespace user_service::adapter::v2 {
+    class RegisterCallData;
+    class RegisterCallDataManager final: public CallDataManager<proto::v1::UserService::AsyncService, RegisterCallData, service::IBasicUserService, RegisterCallDataManager> {
+        friend RegisterCallData;
+    public:
+        RegisterCallDataManager(size_t initial_size, proto::v1::UserService::AsyncService* grpc_service,
+            service::IBasicUserService* business_service, const std::shared_ptr<boost::asio::io_context>& ioc,
+            grpc::ServerCompletionQueue *cq);
+
+        ~RegisterCallDataManager() override;
+
+        void SpecificRegisterCallDataToCQ(RegisterCallData* call_data) const;
+    };
+}
+```
+
+='='=' File: ./UserService/config/app_config.cc '='='='
+```
+// Copyright (c) 2025 seaStarLxy.
+// Licensed under the MIT License.
+
+#include "config/app_config.h"
+
+using namespace user_service::config;
+using namespace user_service::infrastructure;
+
+AppConfig::AppConfig(const std::string& config_path) {
+    try {
+        SPDLOG_INFO("Loading configuration from: {}", config_path);
+        const YAML::Node root_node = YAML::LoadFile(config_path);
+        ParseRedisConfig(root_node);
+        ParseDbConfig(root_node);
+    } catch (const YAML::Exception& e) {
+        SPDLOG_CRITICAL("Error parsing YAML file '{}': {}", config_path, e.what());
+        throw std::runtime_error("Configuration load failed");
+    } catch (const std::exception& e) {
+        SPDLOG_CRITICAL("Configuration error: {}", e.what());
+        throw;
+    }
+}
+
+RedisConfig AppConfig::GetRedisConfig() const {
+    return redis_config;
+}
+
+DbPoolConfig AppConfig::GetDBPoolConfig() const {
+    return db_pool_config;
+}
+
+void AppConfig::ParseRedisConfig(const YAML::Node& root_node) {
+    // 读值
+    if (!root_node["redis"]) {
+        throw std::runtime_error("Missing 'redis' section");
+    }
+    const auto& redis_node = root_node["redis"];
+
+    // 取值
+    std::string host = redis_node["host"].as<std::string>();
+    int port = redis_node["port"].as<int>();
+
+    // 校验
+    ValidateNotEmpty(host, "Redis Host");
+    ValidatePort(port, "Redis Port");
+
+    // 赋值
+    redis_config.host = host;
+    redis_config.port = std::to_string(port); // RedisConfig 里依然存的是 string
+    SPDLOG_INFO("Redis config loaded: {}:{}", redis_config.host, redis_config.port);
+}
+
+void AppConfig::ParseDbConfig(const YAML::Node& root_node) {
+    // 读值
+    if (!root_node["postgresql"]) {
+        throw std::runtime_error("Missing 'postgresql' section");
+    }
+    const auto& db_node = root_node["postgresql"];
+
+    // 取值
+    std::string host = db_node["host"].as<std::string>();
+    int port = db_node["port"].as<int>();
+    std::string user = db_node["user"].as<std::string>();
+    std::string pwd = db_node["password"].as<std::string>();
+    std::string dbname = db_node["dbname"].as<std::string>();
+    int pool_size = db_node["pool_size"].as<int>();
+
+    // 校验
+    ValidateNotEmpty(host, "DB Host");
+    ValidateNotEmpty(user, "DB User");
+    ValidateNotEmpty(dbname, "DB Name");
+    ValidatePort(port, "DB Port");
+    if (pool_size <= 0 || pool_size > 1000) {
+        throw std::runtime_error(fmt::format("Config Error: Invalid DB pool_size {}", pool_size));
+    }
+
+    // 赋值
+    db_pool_config.conn_str = fmt::format("postgresql://{}:{}@{}:{}/{}",
+                                          user, pwd, host, port, dbname);
+    db_pool_config.pool_size = pool_size;
+    SPDLOG_INFO("Database config loaded. Host: {}, PoolSize: {}", host, db_pool_config.pool_size);
+}
+
+void AppConfig::ValidatePort(int port, const std::string& field_name) const {
+    if (port <= 0 || port > 65535) {
+        throw std::runtime_error(
+            fmt::format("Config Error: {} value '{}' is invalid. Must be between 1 and 65535", field_name, port)
+        );
+    }
+}
+
+void AppConfig::ValidateNotEmpty(const std::string& value, const std::string& field_name) const {
+    if (value.empty()) {
+        throw std::runtime_error(fmt::format("Config Error: '{}' cannot be empty", field_name));
+    }
+}
+```
+
+='='=' File: ./UserService/config/app_config.h '='='='
+```
+// Copyright (c) 2025 seaStarLxy.
+// Licensed under the MIT License.
+
+#pragma once
+#include <string>
+#include <yaml-cpp/yaml.h>
+#include "infrastructure/state_storage/redis_dao/redis_client.h"
+#include "infrastructure/persistence/postgresql/include/async_connection_pool.h"
+
+namespace user_service::config {
+    class AppConfig {
+    public:
+        explicit AppConfig(const std::string& config_path);
+
+        // 配置对象不允许拷贝、赋值
+        AppConfig(const AppConfig&) = delete;
+        AppConfig& operator=(const AppConfig&) = delete;
+
+        infrastructure::RedisConfig GetRedisConfig() const;
+        infrastructure::DbPoolConfig GetDBPoolConfig() const;
+
+    private:
+        // YAML::Node，代表配置树的一个节点
+        void ParseRedisConfig(const YAML::Node& root_node);
+        void ParseDbConfig(const YAML::Node& root_node);
+
+        /* 校验逻辑 */
+        void ValidatePort(int port, const std::string& field_name) const;
+        void ValidateNotEmpty(const std::string& value, const std::string& field_name) const;
+
+        infrastructure::RedisConfig redis_config;
+        infrastructure::DbPoolConfig db_pool_config;
+    };
+}
+```
+
+='='=' File: ./UserService/config/config.yaml '='='='
+```
+# config.yaml
+server:
+  port: 50051
+
+redis:
+  host: "grpc-dev-redis.bbqzfi.ng.0001.apse1.cache.amazonaws.com"
+  port: 6379
+
+postgresql:
+  host: "grpc-dev-database.cvosiiw6iypg.ap-southeast-1.rds.amazonaws.com"
+  port: 5432
+  user: "lxy"
+  password: "12345678"
+  dbname: "postgres"
+  pool_size: 4
+```
+
+='='=' File: ./UserService/service/interface/i_auth_service.h '='='='
+```
+// Copyright (c) 2025 seaStarLxy.
+// Licensed under the MIT License.
+
+#pragma once
+#include "../model/auth_model.h"
+#include <boost/asio.hpp>
+
+namespace user_service::service {
+
+    class IAuthService {
+    public:
+        virtual ~IAuthService() = default;
+        virtual boost::asio::awaitable<SendCodeResponse> SendCode(const SendCodeRequest&) = 0;
+        virtual boost::asio::awaitable<LoginResult> LoginByCode(const LoginByCodeRequest&) = 0;
+        virtual boost::asio::awaitable<LoginResult> LoginByPassword(const LoginByPasswordRequest&) = 0;
+    };
+}
+```
+
+='='=' File: ./UserService/service/interface/i_basic_user_service.h '='='='
+```
+// Copyright (c) 2025 seaStarLxy.
+// Licensed under the MIT License.
+
+#pragma once
+#include "../model/basic_user_model.h"
+#include <boost/asio.hpp>
+
+namespace user_service::service {
+    class IBasicUserService {
+    public:
+        virtual ~IBasicUserService() = default;
+        virtual boost::asio::awaitable<RegisterResponse> Register(const RegisterRequest&) = 0;
+        virtual boost::asio::awaitable<GetUserInfoResponse> GetUserInfo(const GetUserInfoRequest&) = 0;
+        virtual boost::asio::awaitable<UpdateUserInfoResponse> UpdateUserInfo(const UpdateUserInfoRequest&) = 0;
+    };
+}
+```
+
+='='=' File: ./UserService/service/src/basic_user_service.cc '='='='
+```
+// Copyright (c) 2025 seaStarLxy.
+// Licensed under the MIT License.
+
+#include "../include/basic_user_service.h"
+#include <spdlog/spdlog.h>
+
+using namespace user_service::service;
+
+BasicUserService::BasicUserService() {
+    SPDLOG_DEBUG("Execute BasicUserService Constructor");
+}
+
+BasicUserService::~BasicUserService() = default;
+
+boost::asio::awaitable<RegisterResponse> BasicUserService::Register(const RegisterRequest& register_request) {
+    std::string prefix("Hello,  ");
+    RegisterResponse register_response(CommonStatus::Success(), prefix+register_request.username);
+    SPDLOG_DEBUG("register_response: {}", register_response.user_id);
+    co_return register_response;
+}
+
+boost::asio::awaitable<GetUserInfoResponse> BasicUserService::GetUserInfo(const GetUserInfoRequest&) {
+
+}
+
+boost::asio::awaitable<UpdateUserInfoResponse> BasicUserService::UpdateUserInfo(const UpdateUserInfoRequest&) {
+
+}
+```
+
+='='=' File: ./UserService/service/src/auth_service.cc '='='='
+```
+// Copyright (c) 2025 seaStarLxy.
+// Licensed under the MIT License.
+
+#include "../include/auth_service.h"
+#include "service/model/common_model.h"
+#include <spdlog/spdlog.h>
+
+
+using namespace user_service::service;
+
+AuthService::AuthService(const std::shared_ptr<util::IVerificationCodeGenerator>& code_generator,
+                         const std::shared_ptr<domain::IVerificationCodeRepository>& code_repository,
+                         const std::shared_ptr<domain::IUserRepository>& user_repository):
+    verification_code_generator_(code_generator), verification_code_repository_(code_repository), user_repository_(user_repository)
+{
+    SPDLOG_DEBUG("Execute AuthService Constructor");
+}
+
+AuthService::~AuthService() = default;
+
+boost::asio::awaitable<SendCodeResponse> AuthService::SendCode(const SendCodeRequest& send_code_request)
+{
+    // 1. 查询用户是否存在
+    bool user_exists = false;
+    // 2. 根据验证码用途进行逻辑校验
+    switch (send_code_request.usage)
+    {
+    case USER_REGISTER:
+        if (user_exists)
+        {
+            SPDLOG_WARN("Registration failed: User {} already exists", send_code_request.phone_number);
+            co_return SendCodeResponse(CommonStatus(ErrorCode::USER_NOT_FOUND, "该手机号已注册"));
+        }
+        break;
+    case USER_LOGIN:
+        if (!user_exists)
+        {
+            co_return SendCodeResponse(CommonStatus(ErrorCode::USER_NOT_FOUND, "该手机号尚未注册"));
+        }
+        break;
+    case RESET_PASSWORD:
+        if (!user_exists)
+        {
+            co_return SendCodeResponse(CommonStatus(ErrorCode::USER_NOT_FOUND, "该手机号尚未注册"));
+        }
+        break;
+    default:
+        co_return SendCodeResponse(CommonStatus(ErrorCode::INVALID_ARGUMENT, "发送验证码用途不明"));
+    }
+    // 3. 生成验证码
+    std::string code = verification_code_generator_->Generate(6);
+    // 4. 模拟发送验证码
+    SPDLOG_DEBUG("send code {} to {}", code, send_code_request.phone_number);
+    // 5. 存到 redis
+    const auto expiry = std::chrono::minutes(5); // TTL: 5分钟
+    co_await verification_code_repository_->SaveCode(send_code_request.usage,
+                                                     send_code_request.phone_number, code, expiry);
+    SPDLOG_DEBUG("Verification code saved to Redis successfully");
+
+    co_return SendCodeResponse(CommonStatus::Success());
+}
+
+boost::asio::awaitable<LoginResult> AuthService::LoginByCode(const LoginByCodeRequest& login_by_code_request)
+{
+}
+
+boost::asio::awaitable<LoginResult> AuthService::LoginByPassword(
+    const LoginByPasswordRequest& login_by_password_request)
+{
+}
+
+```
+
+='='=' File: ./UserService/service/include/auth_service.h '='='='
+```
+// Copyright (c) 2025 seaStarLxy.
+// Licensed under the MIT License.
+
+#pragma once
+#include "service/interface/i_auth_service.h"
+#include "utils/interface/i_verification_code_generator.h"
+#include "domain/interface/i_verification_code_repository.h"
+#include "domain/interface/i_user_repository.h"
+
+
+namespace user_service::service {
+    class AuthService final: public IAuthService {
+    public:
+        explicit AuthService(const std::shared_ptr<util::IVerificationCodeGenerator>& code_generator,
+            const std::shared_ptr<domain::IVerificationCodeRepository>& code_repository,
+            const std::shared_ptr<domain::IUserRepository>& user_repository);
+        ~AuthService() override;
+        boost::asio::awaitable<SendCodeResponse> SendCode(const SendCodeRequest&) override;
+        boost::asio::awaitable<LoginResult> LoginByCode(const LoginByCodeRequest&) override;
+        boost::asio::awaitable<LoginResult> LoginByPassword(const LoginByPasswordRequest&) override;
+    private:
+        std::shared_ptr<util::IVerificationCodeGenerator> verification_code_generator_;
+        std::shared_ptr<domain::IVerificationCodeRepository> verification_code_repository_;
+        std::shared_ptr<domain::IUserRepository> user_repository_;
+    };
+}
+
+```
+
+='='=' File: ./UserService/service/include/basic_user_service.h '='='='
+```
+// Copyright (c) 2025 seaStarLxy.
+// Licensed under the MIT License.
+
+#pragma once
+#include "service/interface/i_basic_user_service.h"
+
+namespace user_service::service {
+    class BasicUserService final: public IBasicUserService {
+    public:
+        BasicUserService();
+        ~BasicUserService() override;
+        boost::asio::awaitable<RegisterResponse> Register(const RegisterRequest&) override;
+        boost::asio::awaitable<GetUserInfoResponse> GetUserInfo(const GetUserInfoRequest&) override;
+        boost::asio::awaitable<UpdateUserInfoResponse> UpdateUserInfo(const UpdateUserInfoRequest&) override;
+    };
+}
+
+```
+
+='='=' File: ./UserService/service/model/auth_model.h '='='='
+```
+// Copyright (c) 2025 seaStarLxy.
+// Licensed under the MIT License.
+
+#pragma once
+#include "service/model/common_model.h"
+#include <string>
+
+namespace user_service::service {
+    // 发送验证码
+    enum CodeUsage {
+        UNKNOWN = 0,
+        USER_REGISTER = 1,
+        USER_LOGIN = 2,
+        RESET_PASSWORD = 3,
+    };
+    struct SendCodeRequest {
+        std::string phone_number;
+        CodeUsage usage;
+    };
+    struct SendCodeResponse {
+        CommonStatus status;
+    };
+
+    // 密码登录
+    struct LoginByPasswordRequest {
+        std::string username;
+        std::string password;
+    };
+    // 验证码登录
+    struct LoginByCodeRequest {
+        std::string phone_number;
+        std::string code;
+    };
+    // 登录结果
+    struct LoginResult {
+        CommonStatus status;
+        std::string token;
+        std::string user_id;
+    };
+}
+
+```
+
+='='=' File: ./UserService/service/model/basic_user_model.h '='='='
+```
+// Copyright (c) 2025 seaStarLxy.
+// Licensed under the MIT License.
+
+#pragma once
+#include "service/model/common_model.h"
+#include <string>
+
+namespace user_service::service {
+    // 注册
+    struct RegisterRequest {
+        std::string username;
+        std::string password;
+        std::string phone_number;
+        std::string code;
+    };
+
+    struct RegisterResponse {
+        CommonStatus status;
+        std::string user_id;
+    };
+
+    // 获取信息
+    struct GetUserInfoRequest {
+        std::string user_id;
+    };
+    struct GetUserInfoResponse {
+        CommonStatus status;
+        std::string user_id;
+        std::string username;
+        std::string email;
+        std::string avatar_url;
+    };
+
+    // 更新信息
+    struct UpdateUserInfoRequest {
+        std::string username;
+        std::string email;
+        std::string avatar_url;
+    };
+
+    struct UpdateUserInfoResponse {
+        CommonStatus status;
+    };
+}
+
+
+```
+
+='='=' File: ./UserService/service/model/common_model.h '='='='
+```
+// Copyright (c) 2025 seaStarLxy.
+// Licensed under the MIT License.
+
+#pragma once
+#include <string>
+#include <cstdint>
+
+namespace user_service::service {
+    enum class ErrorCode: std::int32_t {
+        SUCCESS = 0,
+
+        // 通用错误
+        INTERNAL_ERROR = 1000,
+        INVALID_ARGUMENT = 1001,
+
+        // 用户相关错误 (2000+)
+        USER_NOT_FOUND = 2001,
+        USER_ALREADY_EXISTS = 2002,
+        PASSWORD_INCORRECT = 2003,
+
+        // 验证码相关 (3000+)
+        VERIFICATION_CODE_EXPIRED = 3001,
+        VERIFICATION_CODE_MISMATCH = 3002
+    };
+    struct CommonStatus
+    {
+        ErrorCode code;
+        std::string message;
+        CommonStatus(): code(ErrorCode::SUCCESS), message("") {}
+        CommonStatus(ErrorCode code, const std::string& msg): code(code), message(msg) {}
+        static CommonStatus Success() {
+            return {ErrorCode::SUCCESS, "操作成功"};
+        }
+    };
+
+    // class BusinessException : public std::runtime_error {
+    // public:
+    //     BusinessException(const ErrorCode code, const std::string& message)
+    //         : std::runtime_error(message), code_(code) {}
+    //
+    //     ErrorCode GetCode() const {
+    //         return code_;
+    //     }
+    //
+    // private:
+    //     ErrorCode code_;
+    // };
+}
+
+```
+
+='='=' File: ./UserService/builtin_impl/builtin_impl.cc '='='='
+```
+// Copyright (c) 2025 seaStarLxy.
+// Licensed under the MIT License.
+
+#include <boost/redis/src.hpp>
+
+```
+
+='='=' File: ./UserService/init_sql/init_user_logs.sql '='='='
+```
+-- 登录日志表 (只写)
+CREATE TABLE user_login_logs
+(
+    id       BIGSERIAL PRIMARY KEY,
+    user_id  UUID NOT NULL,
+    login_ip VARCHAR(45),
+    login_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_user FOREIGN KEY (user_id) REFERENCES users (id)
+);
+
+-- 加索引
+CREATE INDEX idx_login_logs_user ON user_login_logs (user_id);
+CREATE INDEX idx_login_logs_time ON user_login_logs (login_at);
+```
+
+='='=' File: ./UserService/init_sql/init_users.sql '='='='
+```
+CREATE TABLE users
+(
+    -- 使用 UUIDv7
+    id            UUID PRIMARY KEY,
+
+    phone_number  VARCHAR(20)                           NOT NULL UNIQUE,
+    username      VARCHAR(64) UNIQUE,
+    email         VARCHAR(128) UNIQUE,
+
+    -- 密码安全
+    password_hash VARCHAR(256)                          NOT NULL,
+    salt          VARCHAR(64)                           NOT NULL,
+
+    -- 资料
+    avatar_url    VARCHAR(512),
+    status        SMALLINT    DEFAULT 0                 NOT NULL, -- 0:正常, 1:冻结
+
+    -- 时间
+    created_at    TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    deleted_at    TIMESTAMPTZ                                     -- 软删除，不删物理行
+);
+```
+
+='='=' File: ./UserService/domain/user.cc '='='='
+```
+// Copyright (c) 2025 seaStarLxy.
+// Licensed under the MIT License.
+
+#include "domain/user.h"
+
+using namespace user_service::domain;
+
+void User::ChangePassword(const std::string& new_hash, const std::string& new_salt) {
+    if (new_hash.empty() || new_salt.empty()) {
+        throw std::invalid_argument("Hash and salt cannot be empty");
+    }
+    password_hash_ = new_hash;
+    salt_ = new_salt;
+}
+
+void User::UpdateProfile(std::optional<std::string> username,
+                   std::optional<std::string> email,
+                   std::optional<std::string> avatar_url) {
+    if (username.has_value()) username_ = username;
+    if (email.has_value()) email_ = email;
+    if (avatar_url.has_value()) avatar_url_ = avatar_url;
+}
+
+void User::MarkAsDeleted() {
+    status_ = UserStatus::DELETED;
+    deleted_at_ = std::chrono::system_clock::now();
+}
+```
+
+='='=' File: ./UserService/domain/user.h '='='='
+```
+// Copyright (c) 2025 seaStarLxy.
+// All Rights Reserved
+
+#pragma once
+#include <string>
+#include <optional>
+#include <chrono>
+// #include "infrastructure/persistence/dao/user_dao.h"
+
+namespace user_service::infrastructure {
+    class UserDao;
+}
+
+namespace user_service::domain
+{
+    // 对应数据库 status 字段 (SMALLINT) 指定16位存储
+    enum class UserStatus : int16_t
+    {
+        NORMAL = 0,
+        FROZEN = 1,
+        INACTIVE = 2,
+        DELETED = 99
+    };
+    class User
+    {
+        friend class infrastructure::UserDao;   // friend & 前向声明
+    public:
+        using TimePoint = std::chrono::system_clock::time_point;
+
+        /* 业务行为 */
+        void ChangePassword(const std::string& new_hash, const std::string& new_salt); // 修改密码
+
+        void UpdateProfile(std::optional<std::string> username,
+                           std::optional<std::string> email,
+                           std::optional<std::string> avatar_url); // 修改个人资料
+
+        void MarkAsDeleted(); // 软删除
+
+        // 只读
+        const std::string& GetId() const { return id_; }
+        const std::string& GetPhoneNumber() const { return phone_number_; }
+        const std::string& GetPasswordHash() const { return password_hash_; }
+        const std::string& GetSalt() const { return salt_; }
+
+        // Optional 字段返回 const 指针或者 optional 引用，方便调用者判断
+        std::optional<std::string> GetUsername() const { return username_; }
+        std::optional<std::string> GetEmail() const { return email_; }
+        std::optional<std::string> GetAvatarUrl() const { return avatar_url_; }
+
+        UserStatus GetStatus() const { return status_; }
+        int GetStatusValue() const { return static_cast<int>(status_); } // 给 DAO 存库用
+
+        TimePoint GetCreatedAt() const { return created_at_; }
+        std::optional<TimePoint> GetDeletedAt() const { return deleted_at_; }
+
+        // 判断是否已删除
+        bool IsDeleted() const
+        {
+            return deleted_at_.has_value() || status_ == UserStatus::DELETED;
+        }
+
+    private:
+        User() = default;
+
+        std::string id_; // UUID
+        std::string phone_number_;
+
+        // 认证安全字段
+        std::string password_hash_;
+        std::string salt_;
+
+        // 可空字段
+        std::optional<std::string> username_;
+        std::optional<std::string> email_;
+        std::optional<std::string> avatar_url_;
+
+        // 状态与时间
+        UserStatus status_;
+        TimePoint created_at_;
+        std::optional<TimePoint> deleted_at_; // 软删除时间
+    };
+}
+
+```
+
+='='=' File: ./UserService/domain/interface/i_user_repository.h '='='='
+```
+// Copyright (c) 2025 seaStarLxy.
+// Licensed under the MIT License.
+
+#pragma once
+#include "service/model/auth_model.h"
+#include <boost/asio.hpp>
+#include <optional>
+#include "domain/user.h"
+
+namespace user_service::domain
+{
+    class IUserRepository
+    {
+    public:
+        virtual ~IUserRepository() = default;
+        virtual boost::asio::awaitable<User> GetUserByPhoneNumber(const std::string& phoneNumber) = 0;
+    };
+}
+
+```
+
+='='=' File: ./UserService/domain/interface/i_verification_code_repository.h '='='='
+```
+// Copyright (c) 2025 seaStarLxy.
+// Licensed under the MIT License.
+
+#pragma once
+#include "service/model/auth_model.h"
+#include <boost/asio.hpp>
+#include <optional>
+
+namespace user_service::domain {
+    class IVerificationCodeRepository {
+    public:
+        virtual ~IVerificationCodeRepository() = default;
+
+        virtual boost::asio::awaitable<void> SaveCode(const service::CodeUsage& usage, const std::string& target,
+            const std::string& code, std::chrono::seconds expiry) = 0;
+
+        virtual boost::asio::awaitable<std::optional<std::string>> GetCode(const service::CodeUsage& usage, const std::string& target) = 0;
+    };
+}
+```
+
+='='=' File: ./UserService/infrastructure/asio_thread_pool/asio_thread_pool.cc '='='='
+```
+// Copyright (c) 2025 seaStarLxy.
+// Licensed under the MIT License.
+
+#include "asio_thread_pool.h"
+#include <spdlog/spdlog.h>
+
+using namespace user_service::infrastructure;
+
+AsioThreadPool::AsioThreadPool(const std::shared_ptr<boost::asio::io_context>& ioc): ioc_(ioc) {
+    SPDLOG_DEBUG("Execute AsioThreadPool Constructor");
+}
+
+AsioThreadPool::~AsioThreadPool() {
+    // 这里保证RAII, 即使不手动Stop, 也保证释放时Stop
+    Stop();
+}
+
+void AsioThreadPool::Run() {
+    // 保证幂等
+    if (work_guard_) {
+        SPDLOG_WARN("AsioThreadPool is already running.");
+        return;
+    }
+
+    // 创建 work_guard，防止 ioc->run() 没有任务就立即退出
+    work_guard_.emplace(boost::asio::make_work_guard(*ioc_));
+
+    unsigned int thread_count = std::thread::hardware_concurrency();
+    if (thread_count == 0) thread_count = 2; // 保底 2 个线程
+    asio_threads_.reserve(thread_count);
+    for (unsigned i = 0; i < thread_count; ++i) {
+        asio_threads_.emplace_back([ioc = ioc_]() {
+            SPDLOG_TRACE("start run");
+            ioc->run();
+            SPDLOG_TRACE("finish run");
+        });
+    }
+    SPDLOG_INFO("Asio thread pool started with {} threads.", thread_count);
+}
+
+// 停止线程池
+void AsioThreadPool::Stop() {
+    // 保证幂等
+    if (!work_guard_) {
+        return;
+    }
+    SPDLOG_DEBUG("Stopping Asio thread pool...");
+
+    // 释放 work_guard，允许 ioc->run() 退出
+    work_guard_.reset();
+    if (ioc_ && !ioc_->stopped()) {
+        ioc_->stop();
+    }
+    // 等待所有线程退出
+    for (auto& t : asio_threads_) {
+        if (t.joinable()) {
+            t.join();
+        }
+    }
+    asio_threads_.clear();
+    SPDLOG_INFO("Asio thread pool stopped.");
+}
+```
+
+='='=' File: ./UserService/infrastructure/asio_thread_pool/asio_thread_pool.h '='='='
+```
+// Copyright (c) 2025 seaStarLxy.
+// Licensed under the MIT License.
+
+#pragma once
+#include <vector>
+#include <thread>
+#include <boost/asio/io_context.hpp>
+#include <spdlog/spdlog.h>
+#include <optional>
+
+namespace user_service::infrastructure {
+    class AsioThreadPool {
+    public:
+        using work_guard_type = boost::asio::executor_work_guard<boost::asio::io_context::executor_type>;
+        AsioThreadPool(const std::shared_ptr<boost::asio::io_context>& ioc);
+        ~AsioThreadPool();
+
+        // 启动和停止一定是幂等的
+        void Run();
+        void Stop();
+
+    private:
+        const std::shared_ptr<boost::asio::io_context> ioc_;
+        std::optional<work_guard_type> work_guard_;
+        std::vector<std::thread> asio_threads_;
+    };
+}
+```
+
+='='=' File: ./UserService/infrastructure/domain_implement/src/user_repository.cc '='='='
+```
+// Copyright (c) 2025 seaStarLxy.
+// Licensed under the MIT License.
+
+#include "../include/user_repository.h"
+
+using namespace user_service::infrastructure;
+using namespace user_service::domain;
+
+UserRepository::UserRepository(const std::shared_ptr<UserDao>& user_dao): user_dao_(user_dao) {
+
+}
+
+UserRepository::~UserRepository() = default;
+
+boost::asio::awaitable<User> UserRepository::GetUserByPhoneNumber(const std::string& phoneNumber) {
+
+}
+```
+
+='='=' File: ./UserService/infrastructure/domain_implement/src/verification_code_repository.cc '='='='
+```
+// Copyright (c) 2025 seaStarLxy.
+// Licensed under the MIT License.
+
+#include "../include/verification_code_repository.h"
+
+#include "spdlog/spdlog.h"
+
+using namespace user_service::infrastructure;
+using namespace user_service::service;
+
+VerificationCodeRepository::VerificationCodeRepository(
+    const std::shared_ptr<RedisClient>& redis_client) : redis_client_(redis_client)
+{
+    SPDLOG_DEBUG("Execute VerificationCodeRepository Constructor");
+}
+
+VerificationCodeRepository::~VerificationCodeRepository() = default;
+
+boost::asio::awaitable<void> VerificationCodeRepository::SaveCode(const CodeUsage& usage, const std::string& target,
+                                                                  const std::string& code, std::chrono::seconds expiry)
+{
+    std::string redis_key;
+    try {
+        // 构建 key
+        redis_key = GetKeyPrefixForUsage(usage) + target;
+    } catch (const std::invalid_argument& e) {
+        SPDLOG_ERROR("Failed to save code due to invalid usage type: {}", e.what());
+        co_return;
+    }
+    SPDLOG_DEBUG("Saving code to redis. Key: [{}], Code: [{}], Expiry: [{}s]",
+                 redis_key, code, expiry.count());
+    co_await redis_client_->Set(redis_key, code, expiry);
+}
+
+boost::asio::awaitable<std::optional<std::string>> VerificationCodeRepository::GetCode(const CodeUsage& usage, const std::string& target)
+{
+    std::string redis_key;
+    try {
+        // 构建 key
+        redis_key = GetKeyPrefixForUsage(usage) + target;
+    } catch (const std::invalid_argument& e) {
+        SPDLOG_ERROR("Failed to get code due to invalid usage type: {}", e.what());
+        co_return std::nullopt;
+    }
+    SPDLOG_DEBUG("Getting code from redis. Key: [{}]", redis_key);
+    co_return co_await redis_client_->Get(redis_key);
+}
+
+std::string VerificationCodeRepository::GetKeyPrefixForUsage(const CodeUsage& usage) const
+{
+    switch (usage)
+    {
+    case USER_REGISTER:
+        return "verify_code:register:";
+    case USER_LOGIN:
+        return "verify_code:login:";
+    case RESET_PASSWORD:
+        return "verify_code:reset_pwd:";
+    default:
+        SPDLOG_ERROR("Unknown CodeUsage enum value: {}", static_cast<int>(usage));
+        throw std::invalid_argument("Unknown CodeUsage");
+    }
+}
+
+```
+
+='='=' File: ./UserService/infrastructure/domain_implement/include/user_repository.h '='='='
+```
+// Copyright (c) 2025 seaStarLxy.
+// Licensed under the MIT License.
+
+#pragma once
+#include "domain/interface/i_user_repository.h"
+#include "infrastructure/persistence/dao/user_dao.h"
+
+namespace user_service::infrastructure {
+    class UserRepository final : public domain::IUserRepository {
+    public:
+        explicit UserRepository(const std::shared_ptr<UserDao>& user_dao);
+        ~UserRepository() override;
+        boost::asio::awaitable<domain::User> GetUserByPhoneNumber(const std::string& phoneNumber) override;
+    private:
+        const std::shared_ptr<UserDao> user_dao_;
+    };
+}
+
+```
+
+='='=' File: ./UserService/infrastructure/domain_implement/include/verification_code_repository.h '='='='
+```
+// Copyright (c) 2025 seaStarLxy.
+// Licensed under the MIT License.
+
+#pragma once
+#include "domain/interface/i_verification_code_repository.h"
+#include "infrastructure/state_storage/redis_dao/redis_client.h"
+#include "service/model/auth_model.h"
+
+namespace user_service::infrastructure
+{
+    class VerificationCodeRepository final : public domain::IVerificationCodeRepository
+    {
+    public:
+        explicit VerificationCodeRepository(const std::shared_ptr<RedisClient>& redis_client);
+        ~VerificationCodeRepository() override;
+
+        boost::asio::awaitable<void> SaveCode(const service::CodeUsage& usage, const std::string& target,
+                                              const std::string& code, std::chrono::seconds expiry) override;
+
+        boost::asio::awaitable<std::optional<std::string>> GetCode(const service::CodeUsage& usage, const std::string& target) override;
+
+    private:
+        std::string GetKeyPrefixForUsage(const service::CodeUsage& usage) const;
+        const std::shared_ptr<RedisClient> redis_client_;
+    };
+}
+
+```
+
+='='=' File: ./UserService/infrastructure/state_storage/redis_dao/redis_client.cc '='='='
+```
+// Copyright (c) 2025 seaStarLxy.
+// Licensed under the MIT License.
+
+#include "redis_client.h"
+#include <spdlog/spdlog.h>
+#include <boost/redis/request.hpp>
+#include <boost/redis/response.hpp>
+#include <boost/redis/resp3/node.hpp>
+#include <boost/redis/resp3/type.hpp>
+
+using namespace user_service::infrastructure;
+
+RedisClient::RedisClient(const std::shared_ptr<boost::asio::io_context>& ioc, const RedisConfig& config):
+    ioc_(ioc), conn_(std::make_shared<boost::redis::connection>(boost::asio::make_strand(ioc->get_executor())))
+{
+    SPDLOG_DEBUG("Execute RedisClient Constructor");
+    cfg_.addr.host = config.host;
+    cfg_.addr.port = config.port;
+}
+
+RedisClient::~RedisClient() = default;
+
+
+boost::asio::awaitable<void> RedisClient::Init() {
+    SPDLOG_DEBUG("STARTING to connect redis");
+    conn_->async_run(cfg_, boost::asio::detached);
+    SPDLOG_DEBUG("next");
+
+    co_await Ping();
+}
+
+boost::asio::awaitable<void> RedisClient::Set(const std::string& key, const std::string& value) {
+    SPDLOG_DEBUG("SET {}: {}", key, value);
+    try {
+        // 创建 SET 请求
+        boost::redis::request req;
+        req.push("SET", key, value);
+        // 异步执行请求
+        co_await conn_->async_exec(req, boost::redis::ignore);
+    } catch (const std::exception& e) {
+        SPDLOG_ERROR("Redis SET failed: {}. Key: {}, Value: {}", e.what(), key, value);
+    }
+}
+
+boost::asio::awaitable<void> RedisClient::Set(const std::string& key, const std::string& value, const std::chrono::seconds& expiry)
+{
+    SPDLOG_DEBUG("SET {}: {} (Expiry: {}s)", key, value, expiry.count());
+    try {
+        boost::redis::request req;
+        // SET key value EX seconds
+        req.push("SET", key, value, "EX", std::to_string(expiry.count()));
+        co_await conn_->async_exec(req, boost::redis::ignore);
+    } catch (const std::exception& e) {
+        SPDLOG_ERROR("Redis SETEX failed: {}. Key: {}, Value: {}, Expiry: {}", e.what(), key, value, expiry.count());
+    }
+}
+
+boost::asio::awaitable<std::optional<std::string>> RedisClient::Get(const std::string& key) {
+    SPDLOG_DEBUG("GET {}", key);
+    try {
+        boost::redis::request req;
+        req.push("GET", key);
+
+        boost::redis::response<boost::redis::resp3::node> resp;
+        co_await conn_->async_exec(req, resp);
+
+        co_return ExtractResult(std::get<0>(resp), "GET", key);
+
+    } catch (const std::exception& e) {
+        SPDLOG_ERROR("Redis GET failed: {}. Key: {}", e.what(), key);
+        co_return std::nullopt;
+    }
+}
+
+boost::asio::awaitable<void> RedisClient::Ping() {
+    boost::redis::request req;
+    req.push("PING");
+    boost::redis::response<boost::redis::resp3::node> resp;
+
+    // async_exec 会自动等待 async_run 建立连接
+    try {
+        co_await conn_->async_exec(req, resp, boost::asio::use_awaitable);
+        const auto result = ExtractResult(std::get<0>(resp), "PING");
+
+        // 针对 PING 的特殊检查
+        if (result.has_value() && result.value() == "PONG") {
+            SPDLOG_INFO("Redis PING successful.");
+            co_return;
+        }
+
+        // 如果没抛异常但是也没返回 PONG (ExtractResult 内部已经打过 Error 日志了，这里抛异常即可)
+        throw std::runtime_error("Redis PING failed or returned unexpected value");
+
+    } catch (const std::exception& e) {
+        SPDLOG_ERROR("Failed to connect to Redis: {}", e.what());
+        throw;
+    }
+}
+
+std::optional<std::string> RedisClient::ExtractResult(const boost::system::result<boost::redis::resp3::node, boost::redis::adapter::error>& result,
+            const std::string& command_name, const std::string& key_context) const {
+
+    // A. 检查系统级错误 (比如网络断开)
+    if (result.has_error()) {
+        SPDLOG_ERROR("Redis {} failed with system error: {}. Context: {}",
+            command_name, result.error().diagnostic, key_context);
+        return std::nullopt;
+    }
+
+    const auto& node = result.value();
+
+    // B. 检查是否是字符串 (Blob String 或 Simple String)
+    // 注意：PONG 是 simple_string，GET 的值通常是 blob_string
+    if (node.data_type == boost::redis::resp3::type::blob_string || node.data_type == boost::redis::resp3::type::simple_string) {
+        return node.value;
+    }
+
+    // C. 检查 Null (Key 不存在)
+    if (node.data_type == boost::redis::resp3::type::null) {
+        SPDLOG_DEBUG("Redis {} key '{}' not found (NULL).", command_name, key_context);
+        return std::nullopt;
+    }
+
+    // D. 检查语义错误 (比如命令参数不对)
+    if (node.data_type == boost::redis::resp3::type::simple_error ||
+        node.data_type == boost::redis::resp3::type::blob_error) {
+        SPDLOG_ERROR("Redis {} returned Redis-Error: {}. Context: {}", command_name, node.value, key_context);
+        return std::nullopt;
+        }
+
+    // E. 其他未预期的类型 (比如返回了 Array 或 Int)
+    SPDLOG_WARN("Redis {} returned unexpected type: {}. Context: {}",
+        command_name, static_cast<int>(node.data_type), key_context);
+    return std::nullopt;
+}
+```
+
+='='=' File: ./UserService/infrastructure/state_storage/redis_dao/redis_client.h '='='='
+```
+// Copyright (c) 2025 seaStarLxy.
+// Licensed under the MIT License.
+
+#pragma once
+#include <string>
+#include <boost/redis/connection.hpp>
+#include <boost/asio.hpp>
+
+namespace user_service::infrastructure {
+    struct RedisConfig {
+        std::string host;
+        std::string port;
+    };
+    class RedisClient {
+    public:
+        RedisClient(const std::shared_ptr<boost::asio::io_context>& ioc, const RedisConfig& config);
+        ~RedisClient();
+        boost::asio::awaitable<void> Init();
+        boost::asio::awaitable<void> Set(const std::string& key, const std::string& value);
+        boost::asio::awaitable<void> Set(const std::string& key, const std::string& value, const std::chrono::seconds& expiry);
+        boost::asio::awaitable<std::optional<std::string>> Get(const std::string& key);
+    private:
+        // 等待联通
+        boost::asio::awaitable<void> Ping();
+        // 结果解析
+        [[nodiscard]] std::optional<std::string> ExtractResult(const boost::system::result<boost::redis::resp3::node, boost::redis::adapter::error>& result,
+            const std::string& command_name, const std::string& key_context= "") const;
+
+        const std::shared_ptr<boost::asio::io_context> ioc_;
+        std::shared_ptr<boost::redis::connection> conn_;
+        boost::redis::config cfg_;
+    };
+}
+```
+
+='='=' File: ./UserService/infrastructure/persistence/postgresql/src/pq_connection.cc '='='='
+```
+// Copyright (c) 2025 seaStarLxy.
+// Licensed under the MIT License.
+
+#include "../include/pq_connection.h"
+#include <spdlog/spdlog.h>
+
+using namespace user_service::infrastructure;
+
+PQConnection::PQConnection(boost::asio::io_context &ioc) : conn_(nullptr, &PQfinish), socket_(ioc) {
+}
+
+boost::asio::awaitable<void> PQConnection::AsyncConnect(const std::string &conn_str) {
+    // 异步启动连接
+    conn_.reset(PQconnectStart(conn_str.c_str()));
+    if (!conn_ || PQstatus(conn_.get()) == CONNECTION_BAD) {
+        throw std::runtime_error(std::string("Connection failed: ") + PQerrorMessage(conn_.get()));
+    }
+    // 获取数据库底层描述符，并交给 boost 协程监听
+    socket_.assign(PQsocket(conn_.get()));
+
+    // 轮询连接状态直到成功，while负责推进前面的
+    while (true) {
+        // 获取当前数据库状态，同时也负责驱动读写操作
+        const auto poll_status = PQconnectPoll(conn_.get());
+        if (poll_status == PGRES_POLLING_WRITING) {
+            // param1: 等待可以写操作， param2: 以协程的方式
+            co_await socket_.async_wait(boost::asio::posix::stream_descriptor::wait_write, boost::asio::use_awaitable);
+        } else if (poll_status == PGRES_POLLING_READING) {
+            co_await socket_.async_wait(boost::asio::posix::stream_descriptor::wait_read, boost::asio::use_awaitable);
+        } else if (poll_status == PGRES_POLLING_OK) {
+            SPDLOG_DEBUG("Connected to Postgresql successfully!");
+            co_return; // 连接成功
+        } else {
+            throw std::runtime_error(std::string("Async connection failed: ") + PQerrorMessage(conn_.get()));
+        }
+    }
+}
+
+boost::asio::awaitable<PGResultPtr> PQConnection::AsyncExecParams(const std::string &query,
+                                                                    const std::vector<std::string> &params) {
+    // 维护参数列表
+    std::vector<const char *> param_values;
+    param_values.reserve(params.size());
+    for (const auto &p: params) {
+        param_values.push_back(p.c_str());
+    }
+    // 非阻塞查询
+    if (PQsendQueryParams(conn_.get(), query.c_str(), params.size(), nullptr,
+                          param_values.data(), nullptr, nullptr, 0) == 0) {
+        throw std::runtime_error(std::string("Failed to send query: ") + PQerrorMessage(conn_.get()));
+    }
+    while (true) {
+        // 以协程方式监听数据库给出的反馈
+        co_await socket_.async_wait(boost::asio::posix::stream_descriptor::wait_read, boost::asio::use_awaitable);
+        // 真正读取数据，成功则为 1，失败则为 0
+        if (PQconsumeInput(conn_.get()) == 0) {
+            throw std::runtime_error(std::string("Failed to consume input: ") + PQerrorMessage(conn_.get()));
+        }
+        // 当前PQ连接不忙代表数据接受完整（可以安全的用 PQgetResult 接受结果了）
+        if (PQisBusy(conn_.get()) == 0) {
+            break;
+        }
+    }
+
+    // 处理返回结果
+    PGResultPtr result(nullptr, &PQclear);
+    while (true) {
+        // 把结果从 pq的数据结构 中拷贝出来
+        result.reset(PQgetResult(conn_.get()));
+        // 有些操作可能有多个返回结果，所以需要使用 while循环 配合 result 检查
+        if (!result) {
+            // 如果结果为空指针，表示所有结果都已处理完毕
+            break;
+        }
+        ExecStatusType status = PQresultStatus(result.get());
+        // 检查 sql运行 是否错误
+        if (status == PGRES_BAD_RESPONSE || status == PGRES_FATAL_ERROR) {
+            // 拿到错误信息并抛出异常
+            throw std::runtime_error(std::string("SQL Error: ") + PQresultErrorMessage(result.get()));
+        }
+        // PGRES_TUPLES_OK 代表执行成功并返回了成功的结果，比如: select
+        // PGRES_COMMAND_OK 代表执行语句执行成功（没有返回结果的那种语句），比如: update、insert
+        if (status == PGRES_TUPLES_OK || status == PGRES_COMMAND_OK) {
+            co_return result; // 成功，返回结果
+        }
+    }
+    // 循环结束还没有返回，很可能是出错了或没有返回结果集
+    co_return PGResultPtr(nullptr, &PQclear);
+}
+
+```
+
+='='=' File: ./UserService/infrastructure/persistence/postgresql/src/async_connection_pool.cc '='='='
+```
+// Copyright (c) 2025 seaStarLxy.
+// Licensed under the MIT License.
+
+#include "../include/async_connection_pool.h"
+
+using namespace user_service::infrastructure;
+
+
+AsyncConnectionPool::AsyncConnectionPool(const std::shared_ptr<boost::asio::io_context>& ioc, const DbPoolConfig& db_pool_config)
+    : ioc_(ioc),
+      conn_str_(db_pool_config.conn_str),
+      pool_size_(db_pool_config.pool_size),
+      signal_channel_(*ioc, (std::numeric_limits<std::size_t>::max)()) {
+    SPDLOG_DEBUG("Execute AsyncConnectionPool Constructor");
+    if (pool_size_ <= 0) {
+        throw std::invalid_argument("Pool size must be positive.");
+    }
+}
+
+boost::asio::awaitable<void> AsyncConnectionPool::Init() {
+    spdlog::info("Initializing connection pool with size {}...", pool_size_);
+    for (int i = 0; i < pool_size_; ++i) {
+        auto conn = std::make_shared<PQConnection>(*ioc_);
+        co_await conn->AsyncConnect(conn_str_);
+        {
+            std::lock_guard lock(mutex_);
+            pool_.push_back(conn);
+        }
+    }
+    spdlog::info("Connection pool initialized successfully.");
+}
+
+boost::asio::awaitable<PooledConnection> AsyncConnectionPool::GetConnection() {
+    std::unique_lock lock(mutex_);
+    while (pool_.empty()) {
+        lock.unlock();
+        // co_await waiter_.async_wait(boost::asio::use_awaitable);
+        (void) co_await signal_channel_.async_receive(boost::asio::use_awaitable);
+        lock.lock();
+    }
+    const std::shared_ptr<PQConnection> conn_sh_ptr = pool_.front();
+    pool_.pop_front();
+    co_return PooledConnection(conn_sh_ptr.get(), ConnectionReleaser(conn_sh_ptr, shared_from_this()));
+}
+
+void AsyncConnectionPool::ReturnConnection(const std::shared_ptr<PQConnection>& conn_sh_ptr) {
+    {
+        // 没有解锁操作，纯靠RAII，但unique_lock可以自己解锁
+        std::lock_guard lock(mutex_);
+        pool_.push_back(conn_sh_ptr);
+    }
+    // 条件变量唤醒
+    // waiter_.cancel_one();
+    // 发信号唤醒
+    signal_channel_.try_send(boost::system::error_code{});
+
+}
+
+// 实现 Deleter
+inline void ConnectionReleaser::operator()(PQConnection *conn) const {
+    // weak_ptr 若观察对象不存在会返回 shared_ptr 包裹一个nullptr
+    if (auto pool_sh_ptr = pool.lock()) {
+        pool_sh_ptr->ReturnConnection(conn_sh_ptr);
+    } else {
+        // 如果连接池已经被销毁，就让 PQConnection 的 shared_ptr 自动管理内存
+        spdlog::warn("Connection pool gone. Connection will be closed.");
+    }
+}
+
+```
+
+='='=' File: ./UserService/infrastructure/persistence/postgresql/include/pq_connection.h '='='='
+```
+// Copyright (c) 2025 seaStarLxy.
+// Licensed under the MIT License.
+
+#pragma once
+#include <libpq-fe.h>
+#include <boost/asio.hpp>
+#include <string>
+#include <vector>
+#include <memory>
+
+namespace user_service::infrastructure {
+    using PGResultPtr = std::unique_ptr<PGresult, decltype(&PQclear)>;
+
+    class PQConnection : public std::enable_shared_from_this<PQConnection> {
+    public:
+        explicit PQConnection(boost::asio::io_context &ioc);
+
+        boost::asio::awaitable<void> AsyncConnect(const std::string &conn_str);
+
+        boost::asio::awaitable<PGResultPtr> AsyncExecParams(const std::string &query,
+                                                              const std::vector<std::string> &params);
+
+    private:
+        // 维护数据库连接，
+        std::unique_ptr<PGconn, decltype(&PQfinish)> conn_;
+        // boost提供的描述符管理器
+        boost::asio::posix::stream_descriptor socket_;
+    };
+}
+
+```
+
+='='=' File: ./UserService/infrastructure/persistence/postgresql/include/async_connection_pool.h '='='='
+```
+// Copyright (c) 2025 seaStarLxy.
+// Licensed under the MIT License.
+
+#pragma once
+#include "pq_connection.h"
+#include <deque>
+#include <mutex>
+#include <memory>
+#include <boost/asio/experimental/channel.hpp>
+#include <spdlog/spdlog.h>
+
+namespace user_service::infrastructure {
+    // 配置文件
+    struct DbPoolConfig {
+        std::string conn_str;
+        int pool_size;
+    };
+    class AsyncConnectionPool;
+    // Deleter 的工作不是 delete 连接，而是将其归还给连接池
+    struct ConnectionReleaser {
+        explicit ConnectionReleaser(const std::shared_ptr<PQConnection> &conn,
+                                    const std::shared_ptr<AsyncConnectionPool> &p) : conn_sh_ptr(conn), pool(p) {
+        }
+        // 实现放后面，因为它需要完整的 Pool 定义，参数需要一定保证是罗指针裸指针
+        void operator()(PQConnection *conn) const;
+        // 持有 PQConnection的shared_ptr 保证不被自动销毁
+        std::shared_ptr<PQConnection> conn_sh_ptr;
+        // 使用 weak_ptr 防止循环引用，并且是线程安全的
+        std::weak_ptr<AsyncConnectionPool> pool;
+    };
+
+    // 封装池化数据库连接，并添加 deleter
+    using PooledConnection = std::unique_ptr<PQConnection, ConnectionReleaser>;
+
+    class AsyncConnectionPool : public std::enable_shared_from_this<AsyncConnectionPool> {
+    public:
+        AsyncConnectionPool(const std::shared_ptr<boost::asio::io_context>& ioc, const DbPoolConfig& db_pool_config);
+
+        boost::asio::awaitable<void> Init();
+
+        boost::asio::awaitable<PooledConnection> GetConnection();
+
+    private:
+        friend struct ConnectionReleaser;
+
+        void ReturnConnection(const std::shared_ptr<PQConnection>& conn_sh_ptr);
+
+        const std::shared_ptr<boost::asio::io_context> ioc_;
+        const std::string conn_str_;
+        const int pool_size_;
+        std::mutex mutex_;
+        // 注意 PQConnection 不可复制
+        std::deque<std::shared_ptr<PQConnection> > pool_;
+        /* 原计划使用steady_timer作为条件变量，但是在获取连接部分，
+         * unlock后和协程挂起前的缝隙，如果发生了notify_one操作会导致这个唤醒丢失，
+         * 所以这个位置需要一个原子操作来实现unlock和协程挂起，按照stdz
+         */
+        // boost::asio::steady_timer waiter_;
+        boost::asio::experimental::channel<void(boost::system::error_code)> signal_channel_;
+    };
+}
+
+```
+
+='='=' File: ./UserService/infrastructure/persistence/dao/user_dao.cc '='='='
+```
+// Copyright (c) 2025 seaStarLxy.
+// Licensed under the MIT License.
+
+#include "infrastructure/persistence/dao/user_dao.h"
+#include <spdlog/spdlog.h>
+
+using namespace user_service::infrastructure;
+using namespace user_service::domain;
+
+UserDao::UserDao(const std::shared_ptr<AsyncConnectionPool>& pool): pool_(pool) {
+
+}
+
+UserDao::~UserDao() = default;
+
+boost::asio::awaitable<std::optional<User>> UserDao::GetUserByPhoneNumber(const std::string& phone_number)
+{
+
+}
+```
+
+='='=' File: ./UserService/infrastructure/persistence/dao/user_dao.h '='='='
+```
+// Copyright (c) 2025 seaStarLxy.
+// Licensed under the MIT License.
+
+#pragma once
+#include <optional>
+
+#include "domain/user.h"
+#include "infrastructure/persistence/postgresql/include/async_connection_pool.h"
+
+namespace user_service::infrastructure
+{
+    class UserDao
+    {
+    public:
+        explicit UserDao(const std::shared_ptr<AsyncConnectionPool>& pool);
+        ~UserDao();
+        boost::asio::awaitable<std::optional<domain::User>> GetUserByPhoneNumber(const std::string& phone_number);
+    private:
+        const std::shared_ptr<AsyncConnectionPool> pool_;
+    };
+}
+```
+
+='='=' File: ./UserService/utils/interface/i_verification_code_generator.h '='='='
+```
+// Copyright (c) 2025 seaStarLxy.
+// Licensed under the MIT License.
+
+#pragma once
+#include <string>
+
+namespace user_service::util {
+    class IVerificationCodeGenerator {
+    public:
+        virtual ~IVerificationCodeGenerator() = default;
+        virtual std::string Generate(int length) = 0;
+    };
+}
+```
+
+='='=' File: ./UserService/utils/src/verification_code_generator.cc '='='='
+```
+// Copyright (c) 2025 seaStarLxy.
+// Licensed under the MIT License.
+
+#include "../include/verification_code_generator.h"
+
+using namespace user_service::util;
+
+CodeGenerator::~CodeGenerator() = default;
+
+std::string CodeGenerator::Generate(int length) {
+    std::uniform_int_distribution<int> distribution(0, 9);
+
+    std::string code;
+    code.reserve(length);
+
+    for (int i = 0; i < length; ++i) {
+        // 获取当前线程的引擎 (无锁)
+        std::mt19937& engine = GetThreadLocalEngine();
+        // 生成一个数字 (0-9)
+        int digit = distribution(engine);
+        code.push_back(digit + '0');
+    }
+
+    return code;
+}
+
+std::mt19937& CodeGenerator::GetThreadLocalEngine() {
+    static thread_local std::mt19937 engine(std::random_device{}());
+    return engine;
+}
+```
+
+='='=' File: ./UserService/utils/include/verification_code_generator.h '='='='
+```
+// Copyright (c) 2025 seaStarLxy.
+// Licensed under the MIT License.
+
+#pragma once
+#include "utils/interface/i_verification_code_generator.h"
+#include <random>
+
+namespace user_service::util {
+    class CodeGenerator final: public IVerificationCodeGenerator{
+    public:
+        ~CodeGenerator() override;
+        std::string Generate(int length) override;
+    private:
+        static std::mt19937& GetThreadLocalEngine();
+    };
+}
+
+```
+
+='='=' File: ./apiGateway/README.md '='='='
+```
+
+
+```shell
+# 前台运行 envoy
+envoy -c /home/seastar/ECommerceSystem-Microservices/apiGateway/envoy.yaml -l info
+```
+
+```shell
+# 生成 proto.pb
+/home/seastar/ECommerceSystem-Microservices/UserService/cmake-build-debug/vcpkg_installed/x64-linux/tools/protobuf/protoc \
+  -I /home/seastar/ECommerceSystem-Microservices/IDL \
+  -I /home/seastar/ECommerceSystem-Microservices/third_party/googleapis \
+  --include_imports \
+  --descriptor_set_out=/home/seastar/ECommerceSystem-Microservices/apiGateway/proto.pb \
+  /home/seastar/ECommerceSystem-Microservices/IDL/UserService/v1/user_service.proto
+  
+
+```
+```
+
+='='=' File: ./apiGateway/envoy.yaml '='='='
+```
+static_resources:
+  listeners:
+    - name: listener_0
+      address:
+        socket_address:
+          address: 0.0.0.0
+          port_value: 8080 # Envoy 对外监听的 HTTP/JSON 端口
+      filter_chains:
+        - filters:
+            - name: envoy.filters.network.http_connection_manager
+              typed_config:
+                "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+                stat_prefix: ingress_http
+                route_config:
+                  name: local_route
+                  virtual_hosts:
+                    - name: local_service
+                      domains: ["*"]
+                      routes:
+                        - match:
+                            prefix: "/"
+                          route:
+                            # 路由到 user_service_cluster
+                            cluster: user_service_cluster
+                            timeout: 60s
+                http_filters:
+                  # gRPC-JSON 转码器
+                  - name: envoy.filters.http.grpc_json_transcoder
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.extensions.filters.http.grpc_json_transcoder.v3.GrpcJsonTranscoder
+
+                      # --------------------------------------------------
+                      # 指定的 proto.pb 文件路径
+                      proto_descriptor: "/home/ubuntu/ECommerceSystem-Microservices/apiGateway/proto.pb"
+                      # --------------------------------------------------
+
+                      services: ["user_service.proto.v1.UserService", "user_service.proto.v1.AuthService"]
+                      print_options:
+                        add_whitespace: true
+                        always_print_primitive_fields: true
+                        always_print_enums_as_ints: false
+                        preserve_proto_field_names: true
+
+                  # 路由器过滤器，必须在最后
+                  - name: envoy.filters.http.router
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
+
+  clusters:
+    - name: user_service_cluster
+      connect_timeout: 5s
+      type: STRICT_DNS
+      # gRPC 服务必须使用 http2
+      typed_extension_protocol_options:
+        envoy.extensions.upstreams.http.v3.HttpProtocolOptions:
+          "@type": type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions
+          explicit_http_config:
+            http2_protocol_options: {}
+      lb_policy: ROUND_ROBIN
+      load_assignment:
+        cluster_name: user_service_cluster
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address:
+                      # 指向本地运行的 gRPC 服务
+                      address: "127.0.0.1"
+                      # gRPC 服务的端口
+                      port_value: 50051
+```
+
+='='=' File: ./.github/workflows/ci.yml '='='='
+```
+name: C++ gRPC CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+env:
+  VCPKG_ROOT: ${{ github.workspace }}/vcpkg
+  BUILD_DIR: ${{ github.workspace }}/UserService/build
+
+jobs:
+  build_and_test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 1. Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: 'recursive'
+
+      - name: 2. Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            pkg-config \
+            ninja-build \
+            zip \
+            unzip \
+            tar \
+            libssl-dev \
+            curl \
+            gdb \
+            bison \
+            flex \
+            autoconf \
+            automake \
+            libtool \
+            git
+
+      - name: 2.1 Clone vcpkg
+        run: |
+          git clone https://github.com/microsoft/vcpkg.git ${{ env.VCPKG_ROOT }}
+
+      - name: 2.2 Bootstrap vcpkg
+        run: ${{ env.VCPKG_ROOT }}/bootstrap-vcpkg.sh
+
+      - name: 2.3 Setup vcpkg binary cache
+        uses: actions/cache@v4
+        with:
+          # vcpkg 在 Linux runner 上的默认二进制缓存路径
+          path: ~/.cache/vcpkg
+          # 当 vcpkg.json 文件内容改变时，缓存的 key 改变
+          key: vcpkg-binary-cache-${{ runner.os }}-${{ hashFiles('**/vcpkg.json') }}
+          # Fallback key
+          restore-keys: |
+            vcpkg-binary-cache-${{ runner.os }}-
+
+      - name: 3. Configure CMake
+        run: |
+          cmake -B $BUILD_DIR \
+                -S $GITHUB_WORKSPACE/UserService \
+                -G Ninja \
+                -DCMAKE_BUILD_TYPE=Debug \
+                -DCMAKE_MAKE_PROGRAM=/usr/bin/ninja \
+                -DCMAKE_TOOLCHAIN_FILE=${{ env.VCPKG_ROOT }}/scripts/buildsystems/vcpkg.cmake
+
+      - name: 4. Build project
+        run: |
+          cmake --build $BUILD_DIR --target UserServiceServer
+
+      - name: 5. Run Program (冒烟测试)
+        run: |
+          echo "Attempting to start the server..."
+          EXECUTABLE_PATH="$BUILD_DIR/UserServiceServer"
+          
+          cd "$BUILD_DIR"
+          # 检查文件是否存在
+          if [ ! -f "$EXECUTABLE_PATH" ]; then
+            echo "Error: Executable not found at $EXECUTABLE_PATH"
+            ls -R $BUILD_DIR
+            exit 1
+          fi
+
+          # 1. 后台运行
+          $EXECUTABLE_PATH &
+          
+          # 2. 拿到这个后台进程的 PID
+          SERVER_PID=$!
+          echo "Server started with PID ${SERVER_PID}"
+
+          # 3. 等待 10 秒
+          echo "Waiting 10 seconds for smoke test..."
+          sleep 10
+
+          # 4. 检查服务器进程是否还活着
+          if kill -0 $SERVER_PID; then
+            echo "SMOKE TEST SUCCESS: Server is still running after 10 seconds."
+            # 5. 杀死服务，让 CI 步骤可以正常结束
+            kill $SERVER_PID
+          else
+            echo "SMOKE TEST FAILED: Server crashed within 10 seconds!"
+            exit 1 # 退出码非 0，标记 CI 失败
+          fi
+```
+

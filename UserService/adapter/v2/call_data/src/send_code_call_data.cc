@@ -1,5 +1,5 @@
 // Copyright (c) 2025 seaStarLxy.
-// All Rights Reserved.
+// Licensed under the MIT License.
 
 #include "adapter/v2/call_data/include/send_code_call_data.h"
 #include "adapter/v2/call_data_manager/include/send_code_call_data_manager.h"

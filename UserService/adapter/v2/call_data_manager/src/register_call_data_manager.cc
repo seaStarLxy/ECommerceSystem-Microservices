@@ -1,5 +1,5 @@
 // Copyright (c) 2025 seaStarLxy.
-// All Rights Reserved.
+// Licensed under the MIT License.
 
 #include "adapter/v2/call_data_manager/include/register_call_data_manager.h"
 #include "adapter/v2/call_data/include/register_call_data.h"
