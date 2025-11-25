@@ -1,5 +1,5 @@
 // Copyright (c) 2025 seaStarLxy.
-// All Rights Reserved.
+// Licensed under the MIT License.
 
 #include "user_service_server.h"
 #include <boost/asio/io_context.hpp>
