@@ -3,6 +3,7 @@
 
 #pragma once
 #include "adapter/v2/call_data_manager/interface/i_call_data_manager.h"
+#include "utils/interface/i_jwt_util.h"
 #include <UserService/v1/user_service.grpc.pb.h>
 #include <type_traits> // for std::is_base_of
 #include <vector>
@@ -27,12 +28,14 @@ namespace user_service::adapter::v2 {
     class CallDataManager: public ICallDataManager {
     public:
         CallDataManager(const size_t initial_size, GrpcServiceType* grpc_service, BusinessServiceType* business_service,
-            const std::shared_ptr<boost::asio::io_context>& ioc, grpc::ServerCompletionQueue *cq):
-            ICallDataManager(initial_size, ioc, cq), grpc_service_(grpc_service), business_service_(business_service) {
+            util::IJwtUtil* jwt_util, const std::shared_ptr<boost::asio::io_context>& ioc, grpc::ServerCompletionQueue *cq):
+            ICallDataManager(initial_size, ioc, cq), grpc_service_(grpc_service),
+            business_service_(business_service), jwt_util_(jwt_util) {
             static_assert(std::is_base_of_v<ICallData, CallDataType>, "CallDataType must derive from ICallData");
 
-            if (!grpc_service_) {
-                throw std::invalid_argument("Service and CQ cannot be null.");
+            // 检查关键依赖是否为空
+            if (!grpc_service_ || !jwt_util_ || !business_service_) {
+                throw std::invalid_argument("Service, JwtUtil, Business Service cannot be null.");
             }
         }
 
@@ -59,9 +62,15 @@ namespace user_service::adapter::v2 {
         BusinessServiceType* GetBusinessService() {
             return business_service_;
         }
+
+        util::IJwtUtil* GetJwtUtil() {
+            return jwt_util_;
+        }
+
     protected:
         GrpcServiceType * grpc_service_;
         BusinessServiceType * business_service_;
+        util::IJwtUtil* jwt_util_;
         std::vector<std::unique_ptr<CallDataType>> pool_;
     };
 }

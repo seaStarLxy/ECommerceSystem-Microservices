@@ -14,6 +14,7 @@ find_package(stduuid CONFIG REQUIRED)
 find_package(jwt-cpp CONFIG REQUIRED)
 find_package(cryptopp REQUIRED)
 find_package(yaml-cpp CONFIG REQUIRED)
+find_package(nlohmann_json CONFIG REQUIRED)
 find_package(spdlog CONFIG REQUIRED)
 add_compile_definitions(SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_TRACE)
 
@@ -149,7 +150,7 @@ target_precompile_headers(UserServiceServer PRIVATE
         <boost/asio.hpp>
         <spdlog/spdlog.h>
         <grpcpp/grpcpp.h>
-#        <jwt-cpp/jwt.h>
+#        <jwt-cpp/jwt.h>    # 修改了宏，不能预编译
         <stduuid/uuid.h>
         <boost/redis.hpp>
 )
@@ -171,7 +172,7 @@ target_link_libraries(UserServiceServer PUBLIC
         spdlog::spdlog
         stduuid
         yaml-cpp::yaml-cpp
-#        nlohmann_json::nlohmann_json
+        nlohmann_json::nlohmann_json
 )
 
 file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/config/config.yaml

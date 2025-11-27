@@ -85,10 +85,10 @@ git clone --recursive git@github.com:seaStarLxy/ECommerceSystem-Microservices.gi
 
 # 若已克隆但缺少子模块
 git submodule update --init --recursive
+```
 
 ### 2. 环境依赖安装
-# 本项目推荐使用 Ubuntu 24.04 环境。
-```
+本项目推荐使用 Ubuntu 24.04 环境。
 
 #### 基础工具链
 ```bash

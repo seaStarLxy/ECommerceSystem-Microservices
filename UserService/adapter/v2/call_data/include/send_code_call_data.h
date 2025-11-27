@@ -10,8 +10,10 @@ namespace user_service::adapter::v2 {
     class SendCodeCallData final: public CallData<proto::v1::SendCodeRequest, proto::v1::SendCodeResponse, SendCodeCallDataManager, SendCodeCallData> {
         friend SendCodeCallDataManager;
     public:
+        static constexpr bool kRequiresAuth = false;
+
         explicit SendCodeCallData(SendCodeCallDataManager* manager);
         ~SendCodeCallData() override;
-        boost::asio::awaitable<void> RunSpecificLogic();
+        boost::asio::awaitable<void> RunSpecificLogic([[maybe_unused]] std::string user_id);
     };
 }

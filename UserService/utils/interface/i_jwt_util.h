@@ -4,6 +4,7 @@
 #pragma once
 #include <expected>
 #include <string>
+#include <string_view>
 
 namespace user_service::util {
 
@@ -22,5 +23,7 @@ namespace user_service::util {
 
         // 验证 Token, 返回解析出的 user_id
         virtual std::expected<std::string, JwtError> VerifyToken(const std::string& token) = 0;
+        // 预留高性能验证接口
+        virtual std::expected<std::string, JwtError> VerifyToken(std::string_view token) = 0;
     };
 }

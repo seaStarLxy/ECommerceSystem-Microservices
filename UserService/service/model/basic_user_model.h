@@ -29,6 +29,7 @@ namespace user_service::service {
         std::string username;
         std::string email;
         std::string avatar_url;
+        std::string phone_number;
     };
 
     // 更新信息

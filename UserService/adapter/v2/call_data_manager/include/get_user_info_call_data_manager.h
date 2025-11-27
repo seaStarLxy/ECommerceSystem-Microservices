@@ -12,8 +12,8 @@ namespace user_service::adapter::v2 {
         friend GetUserInfoCallData;
     public:
         GetUserInfoCallDataManager(size_t initial_size, proto::v1::UserService::AsyncService* grpc_service,
-            service::IBasicUserService* business_service, const std::shared_ptr<boost::asio::io_context>& ioc,
-            grpc::ServerCompletionQueue *cq);
+            service::IBasicUserService* business_service, util::IJwtUtil* jwt_util,
+            const std::shared_ptr<boost::asio::io_context>& ioc, grpc::ServerCompletionQueue *cq);
         ~GetUserInfoCallDataManager() override;
 
         void SpecificRegisterCallDataToCQ(GetUserInfoCallData* call_data) const;

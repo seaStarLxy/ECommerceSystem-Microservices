@@ -13,11 +13,12 @@ GetUserInfoCallData::GetUserInfoCallData(GetUserInfoCallDataManager* manager): C
 
 GetUserInfoCallData::~GetUserInfoCallData() = default;
 
-boost::asio::awaitable<void> GetUserInfoCallData::RunSpecificLogic() {
+boost::asio::awaitable<void> GetUserInfoCallData::RunSpecificLogic(std::string user_id) {
     auto* basic_service = manager_->GetBusinessService();
 
     service::GetUserInfoRequest req;
-    req.user_id = request_.user_id();
+    // 鉴权层传来的 user_id
+    req.user_id = std::move(user_id);
 
     service::GetUserInfoResponse result = co_await basic_service->GetUserInfo(req);
 
@@ -31,8 +32,7 @@ boost::asio::awaitable<void> GetUserInfoCallData::RunSpecificLogic() {
         user->set_username(result.username);
         user->set_email(result.email);
         user->set_avatar_url(result.avatar_url);
-        // Phone number 涉及隐私，视业务需求决定是否返回
-        user->set_phone_number("");
+        user->set_phone_number(result.phone_number);
     }
     co_return;
 }

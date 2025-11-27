@@ -14,7 +14,7 @@ RegisterCallData::RegisterCallData(RegisterCallDataManager* manager): CallData(m
 
 RegisterCallData::~RegisterCallData() = default;
 
-boost::asio::awaitable<void> RegisterCallData::RunSpecificLogic() {
+boost::asio::awaitable<void> RegisterCallData::RunSpecificLogic(std::string user_id) {
     SPDLOG_DEBUG("run RunLogic");
     auto* basic_user_service = manager_->GetBusinessService();
     const service::RegisterRequest register_request(request_.username(), request_.password(),

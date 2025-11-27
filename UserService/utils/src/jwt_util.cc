@@ -37,6 +37,7 @@ std::expected<std::string, JwtError> JwtUtil::VerifyToken(const std::string& tok
         // 检查是否过期
         if (decoded.has_expires_at()) {
             if (std::chrono::system_clock::now() > decoded.get_expires_at()) {
+                SPDLOG_DEBUG("TokenExpired");
                 return std::unexpected(JwtError::TokenExpired);
             }
         }
@@ -60,4 +61,13 @@ std::expected<std::string, JwtError> JwtUtil::VerifyToken(const std::string& tok
         SPDLOG_WARN("JWT Verification Exception: {}", e.what());
         return std::unexpected(JwtError::SignatureInvalid);
     }
+}
+
+std::expected<std::string, JwtError> JwtUtil::VerifyToken(const std::string_view token) {
+    /*
+     * 由于当下的 jwt-cpp 库限制，进行解码需要传入字符串，所以直接调用 std::string 接口，
+     * 但考虑到这里的作为拦截器，性能上应该追求极致，
+     * 理论上未来可以替换成直接解析 std::string_view 的 JWT 库，所以预留此接口
+     */
+    return VerifyToken(std::string(token));
 }

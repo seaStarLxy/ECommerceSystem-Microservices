@@ -67,12 +67,14 @@ boost::asio::awaitable<GetUserInfoResponse> BasicUserService::GetUserInfo(const 
     }
 
     const auto& user = user_opt.value();
+    // 手机号后续可以进行脱敏处理
     co_return GetUserInfoResponse{
         CommonStatus::Success(),
         user.GetId(),
         user.GetUsername().value_or(""),
         user.GetEmail().value_or(""),
-        user.GetAvatarUrl().value_or("")
+        user.GetAvatarUrl().value_or(""),
+        user.GetPhoneNumber()
     };
 }
 

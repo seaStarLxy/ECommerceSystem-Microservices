@@ -13,7 +13,7 @@ LoginByPasswordCallData::LoginByPasswordCallData(LoginByPasswordCallDataManager*
 
 LoginByPasswordCallData::~LoginByPasswordCallData() = default;
 
-boost::asio::awaitable<void> LoginByPasswordCallData::RunSpecificLogic() {
+boost::asio::awaitable<void> LoginByPasswordCallData::RunSpecificLogic(std::string user_id) {
     auto* auth_service = manager_->GetBusinessService();
 
     service::LoginByPasswordRequest req;

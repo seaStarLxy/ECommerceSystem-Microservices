@@ -7,8 +7,9 @@
 using namespace user_service::adapter::v2;
 
 RegisterCallDataManager::RegisterCallDataManager(const size_t initial_size, proto::v1::UserService::AsyncService* grpc_service,
-            service::IBasicUserService* business_service, const std::shared_ptr<boost::asio::io_context>& ioc,
-            grpc::ServerCompletionQueue *cq): CallDataManager(initial_size, grpc_service, business_service, ioc, cq) {
+            service::IBasicUserService* business_service, util::IJwtUtil* jwt_util,
+            const std::shared_ptr<boost::asio::io_context>& ioc, grpc::ServerCompletionQueue *cq):
+    CallDataManager(initial_size, grpc_service, business_service, jwt_util, ioc, cq) {
     SPDLOG_INFO("DEBUG CHECK: RegisterCallDataManager ioc address: {}", fmt::ptr(ioc_.get()));
 }
 

@@ -10,8 +10,10 @@ namespace user_service::adapter::v2 {
     class RegisterCallData final: public CallData<proto::v1::RegisterRequest, proto::v1::RegisterResponse, RegisterCallDataManager, RegisterCallData> {
         friend RegisterCallDataManager;
     public:
+        static constexpr bool kRequiresAuth = false;
+
         explicit RegisterCallData(RegisterCallDataManager* manager);
         ~RegisterCallData() override;
-        boost::asio::awaitable<void> RunSpecificLogic();
+        boost::asio::awaitable<void> RunSpecificLogic([[maybe_unused]] std::string user_id);
     };
 }

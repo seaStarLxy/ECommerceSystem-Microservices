@@ -12,8 +12,8 @@ namespace user_service::adapter::v2 {
         friend LoginByPasswordCallData;
     public:
         LoginByPasswordCallDataManager(size_t initial_size, proto::v1::AuthService::AsyncService* grpc_service,
-            service::IAuthService* business_service, const std::shared_ptr<boost::asio::io_context>& ioc,
-            grpc::ServerCompletionQueue *cq);
+            service::IAuthService* business_service, util::IJwtUtil* jwt_util,
+            const std::shared_ptr<boost::asio::io_context>& ioc, grpc::ServerCompletionQueue *cq);
         ~LoginByPasswordCallDataManager() override;
 
         void SpecificRegisterCallDataToCQ(LoginByPasswordCallData* call_data) const;

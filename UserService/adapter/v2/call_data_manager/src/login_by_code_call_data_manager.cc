@@ -7,9 +7,9 @@
 using namespace user_service::adapter::v2;
 
 LoginByCodeCallDataManager::LoginByCodeCallDataManager(const size_t initial_size, proto::v1::AuthService::AsyncService* grpc_service,
-            service::IAuthService* business_service, const std::shared_ptr<boost::asio::io_context>& ioc,
-            grpc::ServerCompletionQueue *cq)
-            : CallDataManager(initial_size, grpc_service, business_service, ioc, cq) {}
+            service::IAuthService* business_service, util::IJwtUtil* jwt_util
+            , const std::shared_ptr<boost::asio::io_context>& ioc, grpc::ServerCompletionQueue *cq)
+            : CallDataManager(initial_size, grpc_service, business_service, jwt_util, ioc, cq) {}
 
 LoginByCodeCallDataManager::~LoginByCodeCallDataManager() = default;
 
