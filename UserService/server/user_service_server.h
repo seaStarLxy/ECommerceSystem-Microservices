@@ -6,6 +6,7 @@
 #include <UserService/v1/user_service.grpc.pb.h>
 #include "service/interface/i_basic_user_service.h"
 #include "service/interface/i_auth_service.h"
+#include "utils/interface/i_jwt_util.h"
 #include <thread>
 #include <grpcpp/grpcpp.h>
 #include <boost/asio/io_context.hpp>
@@ -17,6 +18,7 @@ namespace user_service::server
     public:
         UserServiceServer(const std::shared_ptr<service::IAuthService>& auth_service,
             const std::shared_ptr<service::IBasicUserService>& basic_service,
+            const std::shared_ptr<util::IJwtUtil>& jwt_util,
             const std::shared_ptr<boost::asio::io_context>& ioc);
         ~UserServiceServer();
         void Run();
@@ -30,7 +32,8 @@ namespace user_service::server
         std::vector<std::thread> worker_threads_;
 
         const std::shared_ptr<boost::asio::io_context> ioc_;
-        std::shared_ptr<service::IAuthService> auth_business_service_;
-        std::shared_ptr<service::IBasicUserService> basic_user_business_service_;
+        const std::shared_ptr<service::IAuthService> auth_business_service_;
+        const std::shared_ptr<service::IBasicUserService> basic_user_business_service_;
+        const std::shared_ptr<util::IJwtUtil> jwt_util_;
     };
 }

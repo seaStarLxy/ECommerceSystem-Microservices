@@ -20,6 +20,7 @@ namespace user_service::util {
 
         std::string GenerateToken(const std::string& user_id) override;
         std::expected<std::string, JwtError> VerifyToken(const std::string& token) override;
+        std::expected<std::string, JwtError> VerifyToken(std::string_view token) override;
 
     private:
         const std::string secret_key_;

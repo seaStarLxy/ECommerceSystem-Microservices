@@ -11,8 +11,10 @@ namespace user_service::adapter::v2 {
     class LoginByPasswordCallData final: public CallData<proto::v1::LoginByPasswordRequest, proto::v1::LoginResponse, LoginByPasswordCallDataManager, LoginByPasswordCallData> {
         friend LoginByPasswordCallDataManager;
     public:
+        static constexpr bool kRequiresAuth = false;
+
         explicit LoginByPasswordCallData(LoginByPasswordCallDataManager* manager);
         ~LoginByPasswordCallData() override;
-        boost::asio::awaitable<void> RunSpecificLogic();
+        boost::asio::awaitable<void> RunSpecificLogic([[maybe_unused]] std::string user_id);
     };
 }

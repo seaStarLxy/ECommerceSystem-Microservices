@@ -23,42 +23,63 @@ RedisClient::~RedisClient() = default;
 
 boost::asio::awaitable<void> RedisClient::Init() {
     SPDLOG_DEBUG("STARTING to connect redis");
+    // 启动连接
     conn_->async_run(cfg_, boost::asio::detached);
-    SPDLOG_DEBUG("next");
+    SPDLOG_DEBUG("Redis async_run started");
 
-    co_await Ping();
+    const auto ping_res = co_await Ping();
+    if (!ping_res.has_value()) {
+        std::string err_msg = fmt::format("Redis Init failed: {}", ping_res.error().message);
+        SPDLOG_CRITICAL("{}", err_msg);
+        // 启动阶段抛异常
+        throw std::runtime_error(err_msg);
+    }
+
+    SPDLOG_INFO("Redis Init successfully.");
 }
 
-boost::asio::awaitable<void> RedisClient::Set(const std::string& key, const std::string& value) {
+boost::asio::awaitable<std::expected<void, RedisError>> RedisClient::Set(const std::string& key, const std::string& value) const {
     SPDLOG_DEBUG("SET {}: {}", key, value);
     try {
-        // 创建 SET 请求
         boost::redis::request req;
         req.push("SET", key, value);
-        // 异步执行请求
+
         co_await conn_->async_exec(req, boost::redis::ignore);
+
+        co_return std::expected<void, RedisError>();
     } catch (const std::exception& e) {
+        // 与 redis 断开连接
         SPDLOG_ERROR("Redis SET failed: {}. Key: {}, Value: {}", e.what(), key, value);
-        // 当下阶段选择抛出，这时候可能 redis 挂了，需要执行降级策略了
-        throw;
+        co_return std::unexpected(RedisError{
+            RedisErrorType::SystemError,
+            fmt::format("SET exception: {}", e.what())
+        });
     }
 }
 
-boost::asio::awaitable<void> RedisClient::Set(const std::string& key, const std::string& value, const std::chrono::seconds& expiry)
-{
+boost::asio::awaitable<std::expected<void, RedisError>> RedisClient::Set(const std::string& key,
+    const std::string& value, const std::chrono::seconds& expiry) const {
     SPDLOG_DEBUG("SET {}: {} (Expiry: {}s)", key, value, expiry.count());
     try {
         boost::redis::request req;
-        // SET key value EX seconds
-        req.push("SET", key, value, "EX", std::to_string(expiry.count()));
+        if (expiry.count() > 0) {
+            req.push("SET", key, value, "EX", std::to_string(expiry.count()));
+        } else {
+            req.push("SET", key, value);
+        }
         co_await conn_->async_exec(req, boost::redis::ignore);
+        co_return std::expected<void, RedisError>();
     } catch (const std::exception& e) {
-        SPDLOG_ERROR("Redis SETEX failed: {}. Key: {}, Value: {}, Expiry: {}", e.what(), key, value, expiry.count());
-        throw;
+        // 与 redis 断开连接
+        SPDLOG_ERROR("Redis SET Exception: {}", e.what());
+        co_return std::unexpected(RedisError{
+            RedisErrorType::SystemError,
+            fmt::format("SET exception: {} (Key: {})", e.what(), key)
+        });
     }
 }
 
-boost::asio::awaitable<std::optional<std::string>> RedisClient::Get(const std::string& key) {
+boost::asio::awaitable<std::expected<std::optional<std::string>, RedisError>> RedisClient::Get(const std::string& key) const {
     SPDLOG_DEBUG("GET {}", key);
     try {
         boost::redis::request req;
@@ -68,46 +89,64 @@ boost::asio::awaitable<std::optional<std::string>> RedisClient::Get(const std::s
         co_await conn_->async_exec(req, resp);
 
         co_return ExtractResult(std::get<0>(resp), "GET", key);
-
     } catch (const std::exception& e) {
-        SPDLOG_ERROR("Redis GET failed: {}. Key: {}", e.what(), key);
-        co_return std::nullopt;
+        // 与 redis 断开连接
+        SPDLOG_ERROR("Redis GET Exception: {}", e.what());
+        co_return std::unexpected(RedisError{
+            RedisErrorType::SystemError,
+            fmt::format("GET exception: {} (Key: {})", e.what(), key)
+        });
     }
 }
 
-boost::asio::awaitable<void> RedisClient::Ping() {
-    boost::redis::request req;
-    req.push("PING");
-    boost::redis::response<boost::redis::resp3::node> resp;
-
-    // async_exec 会自动等待 async_run 建立连接
+boost::asio::awaitable<std::expected<void, RedisError>> RedisClient::Ping() const {
     try {
-        co_await conn_->async_exec(req, resp, boost::asio::use_awaitable);
-        const auto result = ExtractResult(std::get<0>(resp), "PING");
+        boost::redis::request req;
+        req.push("PING");
 
-        // 针对 PING 的特殊检查
-        if (result.has_value() && result.value() == "PONG") {
-            SPDLOG_INFO("Redis PING successful.");
-            co_return;
+        boost::redis::response<boost::redis::resp3::node> resp;
+
+        co_await conn_->async_exec(req, resp);
+
+        auto result = ExtractResult(std::get<0>(resp), "PING", "Init");
+
+        if (!result.has_value()) {
+            co_return std::unexpected(result.error());
         }
 
-        // 如果没抛异常但是也没返回 PONG (ExtractResult 内部已经打过 Error 日志了，这里抛异常即可)
-        throw std::runtime_error("Redis PING failed or returned unexpected value");
+        // 检查 PING 返回值
+        const auto& opt_val = result.value();
+
+        // PING 必须返回 "PONG"
+        if (opt_val.has_value() && opt_val.value() == "PONG") {
+            SPDLOG_DEBUG("Redis PING successful.");
+            co_return std::expected<void, RedisError>(); // 成功
+        }
+
+        // 走到这里说明返回了 Null 或者不是 PONG
+        std::string val = opt_val.value_or("NULL");
+        std::string msg = fmt::format("Redis PING protocol error. Expected 'PONG', got '{}'", val);
+        SPDLOG_ERROR("{}", msg);
+
+        co_return std::unexpected(RedisError{RedisErrorType::ProtocolError, msg});
 
     } catch (const std::exception& e) {
-        SPDLOG_ERROR("Failed to connect to Redis: {}", e.what());
-        throw;
+        std::string msg = fmt::format("Redis PING exception: {}", e.what());
+        SPDLOG_ERROR("{}", msg);
+        co_return std::unexpected(RedisError{RedisErrorType::SystemError, msg});
     }
 }
 
-std::optional<std::string> RedisClient::ExtractResult(const boost::system::result<boost::redis::resp3::node, boost::redis::adapter::error>& result,
-            const std::string& command_name, const std::string& key_context) const {
+std::expected<std::optional<std::string>, RedisError> RedisClient::ExtractResult(
+    const boost::system::result<boost::redis::resp3::node, boost::redis::adapter::error>& result,
+    const std::string& command_name, const std::string& key_context) const {
 
-    // A. 检查系统级错误 (比如网络断开)
+    // A: 系统级错误 (System Error)
     if (result.has_error()) {
-        SPDLOG_ERROR("Redis {} failed with system error: {}. Context: {}",
-            command_name, result.error().diagnostic, key_context);
-        return std::nullopt;
+        std::string msg = fmt::format("Redis {} failed. Error: {}. Context: {}",
+                                      command_name, result.error().diagnostic, key_context);
+        SPDLOG_ERROR("{}", msg);
+        return std::unexpected(RedisError{RedisErrorType::SystemError, msg});
     }
 
     const auto& node = result.value();
@@ -115,24 +154,27 @@ std::optional<std::string> RedisClient::ExtractResult(const boost::system::resul
     // B. 检查是否是字符串 (Blob String 或 Simple String)，这是 Happy Path
     // 注意：PONG 是 simple_string，GET 的值通常是 blob_string
     if (node.data_type == boost::redis::resp3::type::blob_string || node.data_type == boost::redis::resp3::type::simple_string) {
-        return node.value;
+        return std::make_optional(node.value);
     }
 
-    // C. 检查 Null (Key 不存在)
+    // C: Null (Cache Miss) 正常业务逻辑，不是 Error
     if (node.data_type == boost::redis::resp3::type::null) {
-        SPDLOG_DEBUG("Redis {} key '{}' not found (NULL).", command_name, key_context);
         return std::nullopt;
     }
 
-    // D. 检查语义错误 (比如命令参数不对)
+    // D: 检查语义错误 (比如命令参数不对)
     if (node.data_type == boost::redis::resp3::type::simple_error ||
         node.data_type == boost::redis::resp3::type::blob_error) {
-        SPDLOG_ERROR("Redis {} returned Redis-Error: {}. Context: {}", command_name, node.value, key_context);
-        return std::nullopt;
+
+        std::string msg = fmt::format("Redis {} Command Error: {}. Context: {}",
+                                      command_name, node.value, key_context);
+        SPDLOG_ERROR("{}", msg);
+        return std::unexpected(RedisError{RedisErrorType::CommandError, msg});
         }
 
-    // E. 其他未预期的类型 (比如返回了 Array 或 Int)
-    SPDLOG_WARN("Redis {} returned unexpected type: {}. Context: {}",
-        command_name, static_cast<int>(node.data_type), key_context);
-    return std::nullopt;
+    // E: 其他未预期的类型 (比如返回了 Array 或 Int)
+    std::string msg = fmt::format("Redis {} Protocol Error: Unexpected type {}. Context: {}",
+                                  command_name, static_cast<int>(node.data_type), key_context);
+    SPDLOG_WARN("{}", msg);
+    return std::unexpected(RedisError{RedisErrorType::ProtocolError, msg});
 }

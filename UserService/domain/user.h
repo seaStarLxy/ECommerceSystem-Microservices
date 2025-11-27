@@ -6,6 +6,7 @@
 #include <optional>
 #include <chrono>
 #include <format>
+#include <nlohmann/json.hpp>
 
 namespace user_service::infrastructure {
     class UserDao;
@@ -47,6 +48,9 @@ namespace user_service::domain {
             // created_at 不需要设置，插入数据库时会自动生成
             return u;
         }
+
+        [[nodiscard]] nlohmann::json ToJson() const;
+        static std::optional<User> FromJson(const nlohmann::json& json);
 
         // 只读
         [[nodiscard]] const std::string &GetId() const { return id_; }

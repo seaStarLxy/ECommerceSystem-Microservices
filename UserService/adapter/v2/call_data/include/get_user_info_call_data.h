@@ -11,8 +11,10 @@ namespace user_service::adapter::v2 {
     class GetUserInfoCallData final: public CallData<proto::v1::GetUserInfoRequest, proto::v1::GetUserInfoResponse, GetUserInfoCallDataManager, GetUserInfoCallData> {
         friend GetUserInfoCallDataManager;
     public:
+        static constexpr bool kRequiresAuth = true;
+
         explicit GetUserInfoCallData(GetUserInfoCallDataManager* manager);
         ~GetUserInfoCallData() override;
-        boost::asio::awaitable<void> RunSpecificLogic();
+        boost::asio::awaitable<void> RunSpecificLogic(std::string user_id);
     };
 }

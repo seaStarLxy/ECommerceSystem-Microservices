@@ -7,18 +7,20 @@
 #include <boost/asio/co_spawn.hpp>
 #include <spdlog/spdlog.h>
 #include <grpcpp/grpcpp.h>
+#include <expected>
+#include <utility>
 
 namespace user_service::adapter::v2 {
 
     template<typename T>
-    concept HasRunSpecificLogic = requires(T& derived) {
+    concept HasRunSpecificLogic = requires(T& derived, std::string str) {
         // 传入 T& 是因为如果传入T，T是必须可移动可复制的，但T& 没有这个要求
         /*
          * requires 语句检查：
          * 1. 是否存在一个名为 RunSpecificLogic 的成员函数
          * 2. 它被调用时，返回的类型是否与 boost::asio::awaitable<void> 相同
          */
-        { derived.RunSpecificLogic() } -> std::same_as<boost::asio::awaitable<void>>;
+        { derived.RunSpecificLogic(std::move(str)) } -> std::same_as<boost::asio::awaitable<void>>;
     };
 
     /*
@@ -45,7 +47,30 @@ namespace user_service::adapter::v2 {
             }
         }
 
+    private:
         void HandleProcess() {
+            SPDLOG_DEBUG("HandleProcess");
+            std::string user_id; // 默认构造空串 (SSO 开销极低)
+
+            // 1. 鉴权分支 (编译期优化)
+            if constexpr (SpecificCallDataType::kRequiresAuth) {
+                SPDLOG_DEBUG("auth");
+                auto auth_result = PerformAuthentication();
+
+                // 鉴权失败：直接报错并退出
+                if (!auth_result.has_value()) {
+                    status_ = State::FINISHED;
+                    responder_.Finish(reply_, auth_result.error(), this);
+                    return;
+                }
+
+                // 鉴权成功：移动语义获取 ID
+                user_id = std::move(auth_result.value());
+            }
+
+            // 2. 正常业务分支
+            // 此时 user_id 要么是空串(无鉴权)，要么是UUID(有鉴权)
+
             /*
              * 2个陷阱：
              *  1.状态改变不能由 asio线程 执行，必须是工作线程
@@ -58,9 +83,37 @@ namespace user_service::adapter::v2 {
             SPDLOG_DEBUG("start register coroutine");
 
             boost::asio::co_spawn(manager_->GetIOContext(),
-                                  [this] { return RunLogic(); },
+                                    // 参数2: 业务逻辑
+                                  [this, uid = std::move(user_id)] mutable {
+                                      return RunLogic(std::move(uid));
+                                  },
+                                  // 参数3: 业务逻辑收尾
                                   [this](std::exception_ptr e) { OnLogicFinished(e); }
             );
+        }
+
+        [[nodiscard]] std::expected<std::string, grpc::Status> PerformAuthentication() {
+            // 1. 获取 Metadata
+            auto client_metadata = ctx_.client_metadata();
+            const auto iter = client_metadata.find("authorization");
+            if (iter == client_metadata.end()) {
+                return std::unexpected(grpc::Status(grpc::StatusCode::UNAUTHENTICATED, "Missing Authorization Header"));
+            }
+
+            // 2. 提取 Token
+            std::string_view token_view(iter->second.data(), iter->second.length());
+            if (token_view.starts_with("Bearer ")) {
+                token_view.remove_prefix(7);
+            }
+
+            // 3. 校验
+            auto result = manager_->GetJwtUtil()->VerifyToken(token_view);
+            if (!result.has_value()) {
+                return std::unexpected(grpc::Status(grpc::StatusCode::UNAUTHENTICATED, "Invalid Token"));
+            }
+
+            // 4. 返回结果
+            return result.value();
         }
 
         void HandleFinish() {
@@ -83,9 +136,9 @@ namespace user_service::adapter::v2 {
             request_ = RequestType();
         }
 
-        boost::asio::awaitable<void> RunLogic() requires HasRunSpecificLogic<SpecificCallDataType> {
+        boost::asio::awaitable<void> RunLogic(std::string user_id) requires HasRunSpecificLogic<SpecificCallDataType> {
             auto* derived_this = static_cast<SpecificCallDataType*>(this);
-            co_await derived_this->RunSpecificLogic();
+            co_await derived_this->RunSpecificLogic(std::move(user_id));
         }
         // 具体的业务逻辑需要子类重写
         // virtual boost::asio::awaitable<void> RunLogic() = 0;

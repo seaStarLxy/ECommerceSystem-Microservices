@@ -12,8 +12,8 @@ namespace user_service::adapter::v2 {
         friend LoginByCodeCallData;
     public:
         LoginByCodeCallDataManager(size_t initial_size, proto::v1::AuthService::AsyncService* grpc_service,
-            service::IAuthService* business_service, const std::shared_ptr<boost::asio::io_context>& ioc,
-            grpc::ServerCompletionQueue *cq);
+            service::IAuthService* business_service, util::IJwtUtil* jwt_util,
+            const std::shared_ptr<boost::asio::io_context>& ioc, grpc::ServerCompletionQueue *cq);
         ~LoginByCodeCallDataManager() override;
 
         void SpecificRegisterCallDataToCQ(LoginByCodeCallData* call_data) const;

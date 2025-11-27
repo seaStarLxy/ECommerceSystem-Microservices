@@ -17,8 +17,7 @@ VerificationCodeRepository::VerificationCodeRepository(
 VerificationCodeRepository::~VerificationCodeRepository() = default;
 
 boost::asio::awaitable<void> VerificationCodeRepository::SaveCode(const CodeUsage& usage, const std::string& target,
-                                                                  const std::string& code, std::chrono::seconds expiry)
-{
+                                                                  const std::string& code, const std::chrono::seconds expiry) {
     std::string redis_key;
     try {
         // 构建 key
@@ -29,7 +28,12 @@ boost::asio::awaitable<void> VerificationCodeRepository::SaveCode(const CodeUsag
     }
     SPDLOG_DEBUG("Saving code to redis. Key: [{}], Code: [{}], Expiry: [{}s]",
                  redis_key, code, expiry.count());
-    co_await redis_client_->Set(redis_key, code, expiry);
+
+    const auto result = co_await redis_client_->Set(redis_key, code, expiry);
+
+    if (!result.has_value()) {
+        SPDLOG_ERROR("Failed to save verification code to Redis: {}", result.error().message);
+    }
 }
 
 boost::asio::awaitable<std::optional<std::string>> VerificationCodeRepository::GetCode(const CodeUsage& usage, const std::string& target)
@@ -43,7 +47,14 @@ boost::asio::awaitable<std::optional<std::string>> VerificationCodeRepository::G
         co_return std::nullopt;
     }
     SPDLOG_DEBUG("Getting code from redis. Key: [{}]", redis_key);
-    co_return co_await redis_client_->Get(redis_key);
+
+    auto result = co_await redis_client_->Get(redis_key);
+
+    if (!result.has_value()) {
+        SPDLOG_ERROR("Failed to get verification code from Redis: {}", result.error().message);
+        co_return std::nullopt;
+    }
+    co_return result.value();
 }
 
 std::string VerificationCodeRepository::GetKeyPrefixForUsage(const CodeUsage& usage) const

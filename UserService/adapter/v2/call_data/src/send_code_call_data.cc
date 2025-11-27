@@ -15,7 +15,7 @@ SendCodeCallData::SendCodeCallData(SendCodeCallDataManager* manager): CallData(m
 
 SendCodeCallData::~SendCodeCallData() = default;
 
-boost::asio::awaitable<void> SendCodeCallData::RunSpecificLogic() {
+boost::asio::awaitable<void> SendCodeCallData::RunSpecificLogic(std::string user_id) {
     SPDLOG_DEBUG("run RunLogic");
     auto* auth_service = manager_->GetBusinessService();
     const service::SendCodeRequest send_code_request(request_.phone_number(), static_cast<service::CodeUsage>(request_.usage()));

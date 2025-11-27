@@ -22,8 +22,9 @@ using namespace user_service::adapter::v2;
 
 UserServiceServer::UserServiceServer(const std::shared_ptr<service::IAuthService> &auth_service,
                                      const std::shared_ptr<service::IBasicUserService> &basic_service,
+                                     const std::shared_ptr<util::IJwtUtil>& jwt_util,
                                      const std::shared_ptr<boost::asio::io_context> &ioc) : ioc_(ioc),
-    auth_business_service_(auth_service), basic_user_business_service_(basic_service) {
+    auth_business_service_(auth_service), basic_user_business_service_(basic_service), jwt_util_(jwt_util) {
 }
 
 UserServiceServer::~UserServiceServer() = default;
@@ -48,19 +49,19 @@ void UserServiceServer::Run() {
     /* 模版播种法 */
     SPDLOG_DEBUG("Seeded Template CallData.");
     // 注册
-    RegisterCallDataManager register_manager = RegisterCallDataManager(100, &basic_user_grpc_service_, basic_user_business_service_.get(), ioc_, cq_.get());
+    RegisterCallDataManager register_manager = RegisterCallDataManager(100, &basic_user_grpc_service_, basic_user_business_service_.get(), jwt_util_.get(), ioc_, cq_.get());
     register_manager.Start();
     // 发送验证码
-    SendCodeCallDataManager send_code_manager = SendCodeCallDataManager(100, &auth_grpc_service_, auth_business_service_.get(), ioc_, cq_.get());
+    SendCodeCallDataManager send_code_manager = SendCodeCallDataManager(100, &auth_grpc_service_, auth_business_service_.get(), jwt_util_.get(), ioc_, cq_.get());
     send_code_manager.Start();
     // 密码登录
-    LoginByPasswordCallDataManager login_pw_manager(100, &auth_grpc_service_, auth_business_service_.get(), ioc_, cq_.get());
+    LoginByPasswordCallDataManager login_pw_manager(100, &auth_grpc_service_, auth_business_service_.get(), jwt_util_.get(), ioc_, cq_.get());
     login_pw_manager.Start();
     // 验证码登录
-    LoginByCodeCallDataManager login_code_manager(100, &auth_grpc_service_, auth_business_service_.get(), ioc_, cq_.get());
+    LoginByCodeCallDataManager login_code_manager(100, &auth_grpc_service_, auth_business_service_.get(), jwt_util_.get(), ioc_, cq_.get());
     login_code_manager.Start();
     // 获取用户信息
-    GetUserInfoCallDataManager get_user_info_manager(100, &basic_user_grpc_service_, basic_user_business_service_.get(), ioc_, cq_.get());
+    GetUserInfoCallDataManager get_user_info_manager(100, &basic_user_grpc_service_, basic_user_business_service_.get(), jwt_util_.get(), ioc_, cq_.get());
     get_user_info_manager.Start();
 
 

@@ -11,8 +11,10 @@ namespace user_service::adapter::v2 {
     class LoginByCodeCallData final: public CallData<proto::v1::LoginByCodeRequest, proto::v1::LoginResponse, LoginByCodeCallDataManager, LoginByCodeCallData> {
         friend LoginByCodeCallDataManager;
     public:
+        static constexpr bool kRequiresAuth = false;
+
         explicit LoginByCodeCallData(LoginByCodeCallDataManager* manager);
         ~LoginByCodeCallData() override;
-        boost::asio::awaitable<void> RunSpecificLogic();
+        boost::asio::awaitable<void> RunSpecificLogic([[maybe_unused]] std::string user_id);
     };
 }

@@ -13,7 +13,7 @@ LoginByCodeCallData::LoginByCodeCallData(LoginByCodeCallDataManager* manager): C
 
 LoginByCodeCallData::~LoginByCodeCallData() = default;
 
-boost::asio::awaitable<void> LoginByCodeCallData::RunSpecificLogic() {
+boost::asio::awaitable<void> LoginByCodeCallData::RunSpecificLogic(std::string user_id) {
     auto* auth_service = manager_->GetBusinessService();
 
     service::LoginByCodeRequest req;
