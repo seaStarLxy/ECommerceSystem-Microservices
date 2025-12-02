@@ -1,14 +1,23 @@
 cmake_minimum_required(VERSION 3.20)
 project(UserService LANGUAGES CXX)
 
+find_program(CCACHE_PROGRAM ccache)
+if(CCACHE_PROGRAM)
+    set(CMAKE_CXX_COMPILER_LAUNCHER "${CCACHE_PROGRAM}")
+    set(CMAKE_C_COMPILER_LAUNCHER "${CCACHE_PROGRAM}")
+    message(STATUS "Using CCache to speed up compilation")
+endif()
 
+
+option(ENABLE_COVERAGE "Enable coverage for Valgrind and Test" OFF)
 # 编译器参数：关闭优化(-O0)，开启调试信息(-g)，开启覆盖率(--coverage)
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} --coverage -O0 -g")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} --coverage -O0 -g")
-
-# 链接器参数
-set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} --coverage")
-set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} --coverage")
+if(ENABLE_COVERAGE)
+    message(STATUS "Build with Coverage and Debug symbols (Slow runtime, Good for testing)")
+    add_compile_options(-O0 -g --coverage)
+    add_link_options(--coverage)
+else()
+    message(STATUS "Build for Development/Release (Fast build/run)")
+endif()
 
 
 # 注意协程需要 C23 标准以上
